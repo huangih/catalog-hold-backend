@@ -1,0 +1,71 @@
+package tw.com.hyweb.cathold.backend.redis.service;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.function.Function;
+
+import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
+import static org.springframework.data.relational.core.query.Query.query;
+import static org.springframework.data.relational.core.query.Criteria.where;
+import org.springframework.stereotype.Service;
+import lombok.RequiredArgsConstructor;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import tw.com.hyweb.cathold.model.CatalogHoldRule;
+import tw.com.hyweb.cathold.model.ItemSiteDef;
+import tw.com.hyweb.cathold.model.Phase;
+
+@Service
+@RequiredArgsConstructor
+public class VParameterService {
+
+	private static final String REDIS_KEY = "_rediKey";
+
+	private static final String RULECLASS_NAME = "ruleClassName";
+
+	private final ReactiveRedisUtils redisUtils;
+
+	private final R2dbcEntityOperations calVolTemplate;
+
+	public Mono<Integer> getNumberFromRuleName(String paramName) {
+		return this
+				.getParameters(paramName, Integer.class,
+						code -> Mono.justOrEmpty(Integer.parseInt(code)).filter(n -> n > 0))
+				.filter(list -> !list.isEmpty()).map(List::getFirst);
+	}
+
+	public Mono<List<String>> getStatusesFromRuleName(String paramName) {
+		return this.getParameters(paramName, String.class, Mono::justOrEmpty);
+	}
+
+	public Mono<List<Integer>> getSiteIdsByRuleSiteCodes(String paramName) {
+		return this.getParameters(paramName, Integer.class, code -> this.calVolTemplate
+				.selectOne(query(where("siteCode").is(code)), ItemSiteDef.class).map(ItemSiteDef::getSiteId));
+	}
+
+	public Mono<List<Phase>> getPhasesFromRuleName(String paramName) {
+		return this.getParameters(paramName, Phase.class,
+				val -> Flux.fromArray(Phase.values()).filter(p -> p.getName().equals(val)).next());
+	}
+
+	public <R> Mono<List<R>> getParameters(String ruleName, Class<R> clazz, Function<String, Mono<R>> function) {
+		String key = ruleName + REDIS_KEY;
+		Instant instant = LocalDate.now().plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+		return this.redisUtils.getMonoListFromRedis(key, clazz, false, null)
+				.switchIfEmpty(this.redisUtils.getMonoListFromDatabase(key, clazz, false,
+						() -> this.getParametersFromDb(ruleName).flatMap(function).collectList(), null, instant));
+	}
+
+	public Flux<String> getParametersFromDb(String ruleClassName) {
+		return this.calVolTemplate.select(query(where(RULECLASS_NAME).is(ruleClassName)), CatalogHoldRule.class)
+				.flatMapSequential(cr -> Flux.fromArray(cr.getRuleExp().split(",")));
+	}
+
+	public Flux<String> getLikeRuleNames(String ruleClass) {
+		return this.calVolTemplate.select(query(where(RULECLASS_NAME).like(ruleClass + "%")), CatalogHoldRule.class)
+				.map(CatalogHoldRule::getRuleClassName);
+	}
+
+}

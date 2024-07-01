@@ -1,0 +1,46 @@
+cathold:
+  exchange:
+    name: hold.exchange
+    fanout:
+      name: hold.touch.exchange
+  bookingTransit:
+    routekey: holdItem.bookingTransit
+    touch:
+      queue-name: touch.bookingTransit
+    expandDuedate:
+      expandLimit: 7
+      expandDays: 2
+    userbooking:
+      max-number: 7
+  graphql:
+    routeKey: graphql.client
+  holditem:
+    routekey: holdItem.holdItem
+    touch:
+      queue-name: touch.holditem
+  singleHolditem:
+    routekey: holdItem.singleHoldItem
+  intransit:
+    routekey: holdItem.intransit
+    touch:
+      queue-name: touch.intransit
+  notice:
+    routekey: holdItem.notice
+  sqlserverhold:
+    routekey: holdCrud.sqlserverHold
+  marccallvol:
+    routeKey: holdItem.marcCallVolume
+  synlock:
+    routeKey: holdItem.synlock
+  typesiteloc:
+    routekey: holdItem.itemTypeSiteLocation
+  itslstatus:
+    itemCtrlRuleClass: itemCtrlRule_
+  useritemcheck:
+    itemUserCheckRule: itemUserCheckRule_
+  typesitelocation:
+    properties: typeId, siteId, locationId
+  time-zone: Asia/Taipei
+  bookingAvailation:
+    seqNum:
+      colors: black, red, green, yellow, blue, magenta, cyan, gray  

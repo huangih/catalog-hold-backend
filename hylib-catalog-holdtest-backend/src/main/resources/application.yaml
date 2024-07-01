@@ -1,0 +1,39 @@
+spring:
+  data:
+    redis:
+      repositories:
+        enabled: false
+  jpa:
+    open-in-view: false
+    show-sql: false
+    hibernate:
+      ddl-auto: update
+      naming:
+        implicit-strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+        physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+
+  rabbitmq:
+    host: tpl-amqp
+    port: 5672
+    username: hyweb
+    password: 1qaz@WSX3edc
+    virtual-host: tpl
+    listener:
+      direct:
+        auto-startup: true
+    template:
+      exchange: hold.exchange
+    publisher-confirm-type: SIMPLE
+    publisher-returns: true
+  jackson:
+    time-zone: Asia/Taipei
+server:
+  port: 8088
+logging:
+  file:
+    path: logs
+  level:
+    '[org.springframework.cloud.function.context.config.RoutingFunction]': debug
+    '[org.springframework.amqp.rabbit.*]': trace
+  pattern:
+    console: '%d{mm:ss.SSS} %-5p [%-31t] [%-54logger{0}] %marker%m%ex{full} - %logger - %F:%L%n'

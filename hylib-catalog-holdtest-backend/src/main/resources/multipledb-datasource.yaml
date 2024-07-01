@@ -1,0 +1,27 @@
+spring:
+  calvol-datasource:
+    url: jdbc:mariadb://tml-230.tpml.edu.tw:3306/cal_vol_test?characterencoding=utf8
+    username: hyweb
+    password: 1qaz@WSX3edc
+    hikari:
+      minimum-idle: 1
+      maximum-pool-size: 10
+      pool-name: calvol-pool
+  sqlserver-datasource:
+    url: jdbc:sqlserver://hylibtest.tpml.edu.tw:1433;databaseName=hylibTEST;TrustServerCertificate=True
+    username: hylib
+    password: hylib2016PWD
+    hikari:
+      minimum-idle: 1
+      maximum-pool-size: 15
+      pool-name: sqlserver-pool
+hibernate:
+  ddl-auto: update
+  naming:
+    physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+  dialect:
+    mariadb: org.hibernate.dialect.MariaDBDialect
+#    tplnotice: org.hibernate.dialect.MySQL5Dialect
+    sqlserver: org.hibernate.dialect.SQLServerDialect
+open-in-view: false
+show-sql: false
