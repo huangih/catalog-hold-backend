@@ -16,6 +16,8 @@ import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.model.CatalogHoldRule;
 import tw.com.hyweb.cathold.model.ItemSiteDef;
 import tw.com.hyweb.cathold.model.Phase;
+import tw.com.hyweb.cathold.sqlserver.model.ReaderType;
+import tw.com.hyweb.cathold.sqlserver.repository.ReaderTypeRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +27,8 @@ public class VParameterService {
 
 	private static final String RULECLASS_NAME = "ruleClassName";
 
+	private final ReaderTypeRepository readerTypeRepository;
+	
 	private final ReactiveRedisUtils redisUtils;
 
 	private final R2dbcEntityOperations calVolTemplate;
@@ -48,6 +52,13 @@ public class VParameterService {
 	public Mono<List<Phase>> getPhasesFromRuleName(String paramName) {
 		return this.getParameters(paramName, Phase.class,
 				val -> Flux.fromArray(Phase.values()).filter(p -> p.getName().equals(val)).next());
+	}
+
+	public Mono<List<Integer>> getTypeIdsByRuleName(String ruleName) {
+		return this.getParameters(ruleName, Integer.class,
+				typeCode -> Mono.justOrEmpty(this.readerTypeRepository.findByReaderTypeCode(typeCode))
+						.map(ReaderType::getReaderTypeId));
+
 	}
 
 	public <R> Mono<List<R>> getParameters(String ruleName, Class<R> clazz, Function<String, Mono<R>> function) {

@@ -1,24 +1,19 @@
-spring:
-  redis:
-    redisson:
-      config: |
-        singleServerConfig:
-          idleConnectionTimeout: 10000
-          connectTimeout: 10000
-          timeout: 3000
-          retryAttempts: 3
-          retryInterval: 1500
-          password: null
-          subscriptionsPerConnection: 5
-          clientName: null
-          address: "redis://tpl-redis:6379"
-          subscriptionConnectionMinimumIdleSize: 1
-          subscriptionConnectionPoolSize: 50
-          connectionMinimumIdleSize: 10
-          connectionPoolSize: 64
-          database: 0
-          dnsMonitoringInterval: 5000
-        threads: 0
-        nettyThreads: 0
-        codec:
-          class: "org.redisson.codec.JsonJacksonCodec"
+singleServerConfig:
+  idleConnectionTimeout: 10000
+  connectTimeout: 10000
+  timeout: 3000
+  retryAttempts: 3
+  retryInterval: 1500
+  username: redis-user
+  password: f34c0d274674d598e7fa61a5427ebec13f7cc3cabe2e378fa48c985396c6b5d7
+  subscriptionsPerConnection: 5
+  clientName: null
+  address: "redis://tpl-redis:6379"
+  subscriptionConnectionMinimumIdleSize: 1
+  subscriptionConnectionPoolSize: 50
+  connectionMinimumIdleSize: 10
+  connectionPoolSize: 64
+  database: 0
+  dnsMonitoringInterval: 5000
+threads: 0
+nettyThreads: 0

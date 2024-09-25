@@ -17,7 +17,7 @@ spring:
     port: 5672
     username: hyweb
     password: 1qaz@WSX3edc
-    virtual-host: tpl
+    virtual-host: tpl-test
     listener:
       direct:
         auto-startup: true
@@ -27,6 +27,9 @@ spring:
     publisher-returns: true
   jackson:
     time-zone: Asia/Taipei
+  threads:
+    virtual:
+      enabled: true
 server:
   port: 8088
 logging:

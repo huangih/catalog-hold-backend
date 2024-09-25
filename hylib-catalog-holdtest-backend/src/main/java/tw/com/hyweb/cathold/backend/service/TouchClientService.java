@@ -7,7 +7,7 @@ import tw.com.hyweb.cathold.model.client.TouchResult;
 
 public interface TouchClientService {
 
-	Mono<TouchResult> touchHoldItem(Mono<Tuple3<String, String, Integer>> args);
+	Mono<TouchResult> touchHoldItem(Tuple3<String, String, Integer> args);
 
 	void preTouchCallback(String touchId, PreTouchResult preTouchResult);
 

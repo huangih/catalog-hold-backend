@@ -6,11 +6,6 @@ import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.Id;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -36,8 +31,6 @@ public class ItemSiteDef implements Serializable {
 
 	private Integer pickupRule;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate pickupDate;
 
 	private String clyNum;
@@ -48,8 +41,6 @@ public class ItemSiteDef implements Serializable {
 
 	private Integer expandRule;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate availDate;
 
 	private int pickupLimit;

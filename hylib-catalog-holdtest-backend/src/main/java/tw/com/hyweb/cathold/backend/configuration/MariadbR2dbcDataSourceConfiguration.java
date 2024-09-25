@@ -28,6 +28,7 @@ import tw.com.hyweb.cathold.model.AppendixStatusReadConverter;
 import tw.com.hyweb.cathold.model.AppendixStatusWriteConverter;
 import tw.com.hyweb.cathold.model.PhaseReadConverter;
 import tw.com.hyweb.cathold.model.PhaseWriteConverter;
+import tw.com.hyweb.cathold.model.RulePickupReadConverter;
 import tw.com.hyweb.cathold.model.RuleStatusReadConverter;
 import tw.com.hyweb.cathold.model.RuleStatusWriteConverter;
 
@@ -38,7 +39,7 @@ public class MariadbR2dbcDataSourceConfiguration {
 	ConnectionPool mariadbConnectionPool() {
 		Map<String, String> map = new HashMap<>();
 		map.put("characterencoding", "utf8");
-		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host("tml-230.tpml.edu.tw")
+		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host("ml-230.tpml.edu.tw")
 				.database("cal_vol_test").username("hyweb").password("1qaz@WSX3edc").connectionAttributes(map).build();
 		ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(new MariadbConnectionFactory(conf))
 				.initialSize(1).validationQuery("select 1").maxSize(10).name("cal_vol-pool")
@@ -50,8 +51,8 @@ public class MariadbR2dbcDataSourceConfiguration {
 	@Primary
 	R2dbcEntityOperations calVolR2dbcEntityTemplate() {
 		List<Converter<?, ?>> converters = Arrays.asList(new AppendixStatusReadConverter(),
-				new AppendixStatusWriteConverter(), new RuleStatusReadConverter(), new RuleStatusWriteConverter(),
-				new PhaseReadConverter(), new PhaseWriteConverter());
+				new AppendixStatusWriteConverter(), new RulePickupReadConverter(), new RuleStatusReadConverter(),
+				new RuleStatusWriteConverter(), new PhaseReadConverter(), new PhaseWriteConverter());
 		R2dbcCustomConversions r2dbcCustomConversions = R2dbcCustomConversions.of(MySqlDialect.INSTANCE, converters);
 		R2dbcMappingContext context = new R2dbcMappingContext(DefaultNamingStrategy.INSTANCE);
 		R2dbcConverter r2dbcConverter = new MappingR2dbcConverter(context, r2dbcCustomConversions);

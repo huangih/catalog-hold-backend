@@ -1,6 +1,7 @@
 package tw.com.hyweb.cathold.backend.configuration;
 
 import org.springframework.amqp.core.AcknowledgeMode;
+import org.springframework.amqp.core.AsyncAmqpTemplate;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
@@ -23,6 +24,7 @@ import org.springframework.context.annotation.PropertySource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import net.bytebuddy.utility.RandomString;
 import tw.com.hyweb.cathold.backend.service.AmqpBackendService;
 import tw.com.hyweb.cathold.backend.service.FuncNameHeaderListener;
 
@@ -36,26 +38,12 @@ public class AmqpConfiguration {
 	@Value("${cathold.exchange.fanout.name}")
 	private String fanoutExchangeName;
 
-	@Value("${cathold.bookingTransit.routekey}")
-	private String biRouteKey;
-
-	@Value("${cathold.bookingTransit.touch.queue-name}")
-	private String tbiQueueName;
+	@Value("${cathold.backend.routekey}")
+	private String beRouteKey;
 
 	@Bean
 	DirectExchange directExchange() {
 		return new DirectExchange(exchangeName);
-	}
-
-	@Bean
-	@Primary
-	Queue biQueue() {
-		return QueueBuilder.durable(biRouteKey).quorum().build();
-	}
-
-	@Bean
-	Binding biBinding(Queue queue, DirectExchange exchange) {
-		return BindingBuilder.bind(queue).to(exchange).withQueueName();
 	}
 
 	@Bean
@@ -64,13 +52,25 @@ public class AmqpConfiguration {
 	}
 
 	@Bean
-	Queue tbiQueue() {
-		return QueueBuilder.durable(tbiQueueName).quorum().build();
+	@Primary
+	Queue beQueue() {
+		return QueueBuilder.durable(beRouteKey).quorum().build();
 	}
 
 	@Bean
-	Binding tbiBinding(@Qualifier("tbiQueue") Queue queue, FanoutExchange exchange) {
-		return BindingBuilder.bind(queue).to(exchange);
+	Binding beBinding(Queue queue, DirectExchange exchange) {
+		return BindingBuilder.bind(queue).to(exchange).withQueueName();
+	}
+
+	@Bean
+	Queue tcQueue() {
+		String name = "backend-" + RandomString.make();
+		return QueueBuilder.durable(name).autoDelete().build();
+	}
+
+	@Bean
+	Binding tcBinding(@Qualifier("tcQueue") Queue queue, DirectExchange exchange) {
+		return BindingBuilder.bind(queue).to(exchange).withQueueName();
 	}
 
 	@Bean
@@ -83,27 +83,25 @@ public class AmqpConfiguration {
 		var template = new RabbitTemplate(connectionFactory);
 		template.setMessageConverter(messageConverter);
 		template.setExchange(exchangeName);
-		template.setReplyTimeout(2000000);
+		template.setReplyTimeout(20000);
 		template.setUsePublisherConnection(true);
 		template.setUseChannelForCorrelation(true);
 		return template;
 	}
 
 	@Bean
-	AsyncRabbitTemplate asyncTemplate(RabbitTemplate template) {
-		var asyncTemplate = new AsyncRabbitTemplate(template);
-		asyncTemplate.setEnableConfirms(true);
-		return asyncTemplate;
+	AsyncAmqpTemplate asyncTemplate(RabbitTemplate template) {
+		return new AsyncRabbitTemplate(template);
 	}
 
 	@Bean
 	MessageListenerContainer listenerContainer(ConnectionFactory factory, MessageConverter messageConverter,
-			AmqpBackendService amqpBookingService, Queue queue, @Qualifier("tbiQueue") Queue tbiQueue) {
+			AmqpBackendService amqpBackendService, Queue queue, @Qualifier("tcQueue") Queue tcQueue) {
 		var container = new DirectMessageListenerContainer(factory);
-		var listener = new FuncNameHeaderListener(amqpBookingService, messageConverter);
-		container.setConsumersPerQueue(50);
+		var listener = new FuncNameHeaderListener(amqpBackendService, messageConverter);
+		container.setConsumersPerQueue(5);
 		container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-		container.addQueues(queue, tbiQueue);
+		container.addQueues(queue, tcQueue);
 		container.setMessageListener(listener);
 		return container;
 	}

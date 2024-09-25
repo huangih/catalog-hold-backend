@@ -14,6 +14,8 @@ cathold:
       max-number: 7
   graphql:
     routeKey: graphql.client
+  backend:
+    routeKey: backend.client
   holditem:
     routekey: holdItem.holdItem
     touch:
@@ -26,6 +28,10 @@ cathold:
       queue-name: touch.intransit
   notice:
     routekey: holdItem.notice
+  nnotice:
+    routekey: holdItem.nnotice
+  rfidctl:
+    routekey: holdItem.rfidctl
   sqlserverhold:
     routekey: holdCrud.sqlserverHold
   marccallvol:

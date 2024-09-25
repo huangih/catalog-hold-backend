@@ -23,7 +23,7 @@ public class TouchLog implements Serializable {
 
 	private int clientId;
 
-	private char result;
+	private String result = "";
 
 	private long preMillions;
 

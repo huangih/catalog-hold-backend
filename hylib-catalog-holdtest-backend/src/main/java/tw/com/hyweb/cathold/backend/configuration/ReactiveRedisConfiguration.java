@@ -1,10 +1,17 @@
 package tw.com.hyweb.cathold.backend.configuration;
 
+import java.io.File;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.config.Config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
+import org.springframework.util.ResourceUtils;
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
@@ -14,7 +21,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 @Configuration
-@PropertySource(factory = YamlPropertySourceFactory.class, value = "classpath:redisson-config.yaml")
 public class ReactiveRedisConfiguration {
 
 	private static final String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
@@ -30,6 +36,14 @@ public class ReactiveRedisConfiguration {
 		om.activateDefaultTyping(om.getPolymorphicTypeValidator(), ObjectMapper.DefaultTyping.NON_FINAL,
 				As.WRAPPER_ARRAY);
 		return om;
+	}
+
+	@Bean
+	RedissonClient redissonClient(ObjectMapper objectMapper) throws IOException {
+		File file = ResourceUtils.getFile("classpath:redisson-config.yaml");
+		Config config = Config.fromYAML(file);
+		config.setCodec(new JsonJacksonCodec(objectMapper));
+		return Redisson.create(config);
 	}
 
 }

@@ -27,6 +27,7 @@ public class ItemTypeDefService implements HoldClientPropConverter {
 				}).defaultIfEmpty(noticeProp);
 	}
 
+	@Override
 	public Mono<List<Integer>> getIdsByCodes(List<String> typeCodes) {
 		return this.calVolTemplate.select(query(where("itemTypeCode").in(typeCodes)), ItemTypeDef.class)
 				.map(ItemTypeDef::getItemTypeId).collectList();

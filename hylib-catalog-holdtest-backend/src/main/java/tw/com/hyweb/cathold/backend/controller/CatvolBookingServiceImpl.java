@@ -21,12 +21,12 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	@Override
 	public Mono<ServerResponse> touchHoldItem(ServerRequest request) {
 		Mono<String> param0 = Mono.justOrEmpty(request.queryParam("barcode"))
-				.map(code -> code.length() > 30 ? code.substring(0, 30) : code);
-		Mono<String> param1 = Mono.justOrEmpty(request.queryParam("barcodesessionId"));
-		Mono<Integer> param2 = Mono.justOrEmpty(request.queryParam("muserId")).map(Integer.class::cast)
+				.map(code -> code.length() > 30 ? code.substring(0, 30) : code).filter(code -> code.length() > 2);
+		Mono<String> param1 = Mono.justOrEmpty(request.queryParam("sessionId"));
+		Mono<Integer> param2 = Mono.justOrEmpty(request.queryParam("muserId")).map(Integer::parseInt)
 				.defaultIfEmpty(500);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
-				.body(this.touchClientService.touchHoldItem(Mono.zip(param0, param1, param2)), TouchResult.class)
+				.body(Mono.zip(param0, param1, param2).flatMap(this.touchClientService::touchHoldItem), TouchResult.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 

@@ -1,20 +1,18 @@
 package tw.com.hyweb.cathold.backend.service;
 
-import java.util.Arrays;
+import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldClientService;
+import tw.com.hyweb.cathold.backend.redis.service.VTouchControlService;
 import tw.com.hyweb.cathold.model.client.PreTouchResult;
 import tw.com.hyweb.cathold.model.client.TouchControl;
 import tw.com.hyweb.cathold.model.client.TouchResult;
@@ -28,68 +26,54 @@ public class TouchClientServiceImpl implements TouchClientService {
 	private String hiRouteKey;
 
 	@Value("${cathold.bookingTransit.routekey}")
-	private String biRouteKey;
+	private String btRouteKey;
 
-	@Value("${cathold.intransit.routekey}")
-	private String itRouteKey;
+	private final VTouchControlService vTouchControlService;
 
-//	private final VTouchLogService vTouchLogService;
-//	
-//	private final VHoldClientService vHoldClientService;
-//	
-	private List<Character> prefixChars;
+	private final AmqpBackendClient amqpBackendClient;
 
-	private int enableNum = 0;
+	private final VHoldClientService vHoldClientService;
 
-	@PostConstruct
-	public void initParameters() {
-		this.prefixChars = Arrays.asList('-', '/', '!');
-		for (int enable : Arrays.asList(1, 3, 5, 7, 9))
-			this.enableNum -= 1 << enable;
-	}
+	private final List<Character> prefixChars = List.of('-', '/', '!');
 
 	@Override
-	public Mono<TouchResult> touchHoldItem(Mono<Tuple3<String, String, Integer>> args) {
-//		args.flatMap(tuple3-> {
-//			this.vHoldClientService.getHoldClientBySessionId(tuple3.getT2());
-//		});
-//		if (this.vHoldClientService.getHoldClientBySessionId(sessionId) != null && barcode.length() > 0) {
-//			int clientId = Integer.parseInt(sessionId.split("_")[0]);
-//			int touchLogId = this.vTouchLogService.newTouchLog(barcode, clientId);
-//			LocalTime beg = LocalTime.now();
-//			String tcId = RandomString.make() + "|" + barcode + "#" + muserId;
-//			TouchControl touchCtrl = new TouchControl(this.enableNum);
-//			touchCtrlMap.put(tcId, touchCtrl);
-//			char ctrlChar = 0;
-//			if (this.prefixChars.contains(barcode.charAt(0))) {
-//				ctrlChar = barcode.charAt(0);
-//				barcode = barcode.substring(1);
-//			}
-//			if (ctrlChar == '!') {
-//				TouchResult tResult = this.vTouchLogService.rollbackHoldItem(barcode, clientId);
-//				if (tResult != null)
-//					return tResult;
-//			}
-//			this.amqpGraphQLClient.touchHoldItemPre(barcode, ctrlChar, sessionId, tcId);
-//			Map<Integer, String> map = this.preTouchResp(tcId);
-//			if (map == null)
-//				return this.touchError("map == null");
-//			String status = map.remove(-1);
-//			List<Integer> keys = map.keySet().stream().sorted(Comparator.reverseOrder()).toList();
-//			CompletableFuture.runAsync(
-//					() -> this.vTouchLogService.setPreTime(keys, touchCtrl.getLastCallback(), status, beg, touchLogId));
-//			TouchResult touchResult;
-//			if (!keys.isEmpty() && keys.get(0) < (1 << 16))
-//				touchResult = this.amqpGraphQLClient.touchPostProcess(map.get(keys.get(0)));
-//			else
-//				touchResult = null;
-//			CompletableFuture.runAsync(() -> this.vTouchLogService.saveLog(touchResult, beg, touchLogId));
-//			if (touchResult != null)
-//				return touchResult;
-//			return this
-//					.touchError(keys.isEmpty() ? "cathold.touch.wrongTouchPreCallback" : "cathold.touch.wrongBarcode");
-//		}
-		return Mono.just(this.touchError("cathold.touch.nosuchClientId"));
+	public Mono<TouchResult> touchHoldItem(Tuple3<String, String, Integer> args) {
+		String barcode = args.getT1();
+		String sessionId = args.getT2();
+		int muserId = args.getT3();
+		return this.vHoldClientService.getHoldClientBySessionId(sessionId)
+				.flatMap(hc -> this.vTouchControlService.newTouchControl(barcode, hc, muserId)
+						.flatMap(tc -> this.touchHoldItemPre(sessionId, tc.getTouchControlId())
+								.switchIfEmpty(this.touchHoldItem(tc))))
+				.switchIfEmpty(this.touchError("cathold.touch.nosuchClientId"));
+	}
+
+	private Mono<TouchResult> touchHoldItem(TouchControl touchControl) {
+		return Mono.fromFuture(touchControl.waitPreReady())
+				.timeout(Duration.ofSeconds(2), Mono.defer(() -> Mono.just(touchControl.waitPostMapTimeoutN())))
+				.doOnNext(this.vTouchControlService::updatePreTime).flatMap(tc -> {
+					Map<Integer, String> map = tc.getPreMap();
+					if (map.isEmpty())
+						return this.touchError("cathold.touch.wrongTouchPreCallback");
+					int key = Collections.max(map.keySet());
+					if (key == (1 << 16))
+						return this.touchError("cathold.touch.wrongBarcode");
+					if (key == (1 << 17))
+						return this.touchError("cathold.touch.preTouchTimeout");
+					return this.amqpBackendClient.touchPostProcess(map.get(key))
+							.doOnNext(tr -> this.vTouchControlService.updateResultTime(tr, tc));
+				});
+	}
+
+	private Mono<TouchResult> touchHoldItemPre(String sessionId, String tcId) {
+		String barcode = tcId.split("#")[0].split("\\|")[1];
+		char ctrlChar = 0;
+		if (this.prefixChars.contains(barcode.charAt(0))) {
+			ctrlChar = barcode.charAt(0);
+			barcode = barcode.substring(1);
+		}
+		return this.vTouchControlService.rollbackHoldItem(barcode, ctrlChar, Integer.parseInt(sessionId.split("_")[0]))
+				.switchIfEmpty(this.amqpBackendClient.touchHoldItemPre(barcode, ctrlChar, sessionId, tcId));
 	}
 
 	@Override
@@ -98,27 +82,11 @@ public class TouchClientServiceImpl implements TouchClientService {
 			this.touchCtrlMap.get(touchId).preTouchCallback(preTouchResult);
 	}
 
-	private Map<Integer, String> preTouchResp(String tcId) {
-		TouchControl touchControl = touchCtrlMap.get(tcId);
-		Map<Integer, String> map = null;
-		if (touchControl != null)
-			try {
-				map = CompletableFuture.supplyAsync(touchControl::waitPostMap).orTimeout(2, TimeUnit.SECONDS)
-						.exceptionally(e -> touchControl.waitPostMapTimeout()).get();
-			} catch (InterruptedException e1) {
-				Thread.currentThread().interrupt();
-			} catch (ExecutionException e) {
-				e.printStackTrace();
-			}
-		this.touchCtrlMap.remove(tcId);
-		return map;
-	}
-
-	private TouchResult touchError(String msg) {
+	private Mono<TouchResult> touchError(String msg) {
 		TouchResult touchResult = new TouchResult('E', "error");
 		touchResult.setResultClass(String.class);
 		touchResult.setResultObject(msg);
-		return touchResult;
+		return Mono.just(touchResult);
 	}
 
 }

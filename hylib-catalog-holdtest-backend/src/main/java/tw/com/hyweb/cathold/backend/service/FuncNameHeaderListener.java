@@ -3,7 +3,6 @@ package tw.com.hyweb.cathold.backend.service;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
 import org.springframework.amqp.support.converter.MessageConverter;
-
 import lombok.NoArgsConstructor;
 
 @NoArgsConstructor

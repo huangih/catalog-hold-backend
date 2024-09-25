@@ -1,5 +1,6 @@
 package tw.com.hyweb.cathold.backend.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
@@ -59,7 +60,13 @@ public class ItemSiteDefService implements HoldClientPropConverter {
 //	}
 //
 	public Mono<Integer> getIdByCode(String siteCode) {
-		return this.calVolTemplate.selectOne(query(where(SITE_CODE).is(siteCode)), ItemSiteDef.class).map(ItemSiteDef::getSiteId);
+		return this.calVolTemplate.selectOne(query(where(SITE_CODE).is(siteCode)), ItemSiteDef.class)
+				.map(ItemSiteDef::getSiteId);
+	}
+
+	public Mono<Boolean> allowExpandDueDateBySiteIdAndAvailDate(int pickupSiteId, LocalDateTime availableDate) {
+		return this.calVolTemplate.selectOne(query(where("siteId").is(pickupSiteId)), ItemSiteDef.class)
+				.map(siteDef -> siteDef.canExpand(availableDate)).defaultIfEmpty(true);
 	}
 
 }

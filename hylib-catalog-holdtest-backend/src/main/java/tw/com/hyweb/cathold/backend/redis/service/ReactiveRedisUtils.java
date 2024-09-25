@@ -80,10 +80,9 @@ public class ReactiveRedisUtils {
 		if (duration == null)
 			duration = Duration.ofDays(1);
 		final Duration fDuration = duration;
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b).flatMap(b -> supplier.get().map(obj -> {
-			rObj.set(obj, fDuration);
-			return obj;
-		}).doFinally(s -> rLock.forceUnlock().subscribe()));
+		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
+				.flatMap(b -> supplier.get().flatMap(obj -> rObj.set(obj, fDuration).thenReturn(obj))
+						.doFinally(s -> rLock.forceUnlock().subscribe()));
 	}
 
 	public <T> Mono<T> redisLockCache(String key, T object, Duration duration) {
@@ -93,8 +92,8 @@ public class ReactiveRedisUtils {
 			duration = Duration.ofDays(1);
 		final Duration fDuration = duration;
 		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> rObj.set(object, fDuration).doFinally(s -> rLock.forceUnlock().subscribe()))
-				.thenReturn(object);
+				.flatMap(b -> rObj.set(object, fDuration).thenReturn(object))
+				.doFinally(s -> rLock.forceUnlock().subscribe());
 	}
 
 	private <T> Mono<T> saveForCache(String key, T obj, Duration duration, Instant instant) {

@@ -14,6 +14,7 @@ import static org.springframework.data.relational.core.query.Query.query;
 import static org.springframework.data.relational.core.query.Criteria.where;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.backend.service.HoldClientPropConverter;
@@ -29,6 +30,7 @@ import tw.com.hyweb.cathold.model.client.VHoldClient;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VHoldClientService {
 
 	private static final String HOLDCLIENT_PREFIX = "hc:holdClientId:%d:holdClient";
@@ -72,58 +74,49 @@ public class VHoldClientService {
 					vhc.setNoticeTypesMap(nTypeMap);
 					return this.convertNoticeProp(holdClient.getNoticeSites(), this.itemSiteDefService);
 				}).flatMap(nSiteMap -> {
-					vhc.setNoticeTypesMap(nSiteMap);
+					vhc.setNoticeSitesMap(nSiteMap);
 					return this.convertNoticeProp(holdClient.getNoticeLocations(), this.itemLocationDefService);
 				}).map(nLocMap -> {
 					vhc.setNoticeLocsMap(nLocMap);
+					log.info("{}", vhc);
 					return vhc;
 				});
 	}
 
 	private Mono<GiveSeqProp> parseGiveSeqProp(@NonNull String s) {
 		GiveSeqProp giveSeqProp = new GiveSeqProp();
-		return Mono.just(s).flatMap(s1 -> {
-			int inx = this.getDelimitIndex(s1);
-			if (inx > 0) {
-				giveSeqProp.setSiteProp(inx, s1);
+		return Mono.just(this.getDelimitIndex(s)).filterWhen(index -> {
+			if (index > 0) {
+				giveSeqProp.setSiteProp(index, s);
 				return this.itemSiteDefService.getIdsByCodes(giveSeqProp.getSiteCodes()).map(siteIds -> {
 					giveSeqProp.setSiteIds(siteIds);
-					return s1.substring(inx + 1);
+					return s.length() > index;
 				});
 			}
-			if (inx < 0 || s1.length() <= inx)
-				return Mono.empty();
-			return Mono.just(s1.substring(inx + 1));
-		}).flatMap(s2 -> {
-			int inx = this.getDelimitIndex(s2);
-			if (inx > 0)
-				giveSeqProp.setAnnexProp(inx, s2);
-			if (inx < 0 || s2.length() <= inx)
-				return Mono.empty();
-			return Mono.just(s2.substring(inx + 1));
-		}).flatMap(s3 -> {
-			int inx = this.getDelimitIndex(s3);
-			if (inx > 0) {
-				giveSeqProp.setTypeProp(inx, s3);
+			return Mono.just(index >= 0 && s.length() > index);
+		}).map(index -> s.substring(index + 1)).flatMap(s1 -> Mono.just(this.getDelimitIndex(s1)).filterWhen(inx1 -> {
+			if (inx1 > 0)
+				giveSeqProp.setAnnexProp(inx1, s1);
+			return Mono.just(inx1 >= 0 && s1.length() > inx1);
+		}).map(inx1 -> s1.substring(inx1 + 1))).flatMap(s2 -> Mono.just(this.getDelimitIndex(s2)).filterWhen(inx2 -> {
+			if (inx2 > 0) {
+				giveSeqProp.setTypeProp(inx2, s2);
 				return this.itemTypeDefService.getIdsByCodes(giveSeqProp.getTypeCodes()).map(typeIds -> {
 					giveSeqProp.setTypeIds(typeIds);
-					return s3.substring(inx + 1);
+					return s2.length() > inx2;
 				});
 			}
-			if (inx < 0 || s3.length() <= inx)
-				return Mono.empty();
-			return Mono.just(s3.substring(inx + 1));
-		}).flatMap(s4 -> {
-			int inx = this.getDelimitIndex(s4);
-			if (inx > 0) {
-				giveSeqProp.setLocProp(inx, s4);
-				return this.itemLocationDefService.getIdsByCodes(giveSeqProp.getLocCodes()).map(typeIds -> {
-					giveSeqProp.setLocIds(typeIds);
-					return giveSeqProp;
+			return Mono.just(inx2 >= 0 && s2.length() > inx2);
+		}).map(inx2 -> s2.substring(inx2 + 1))).flatMap(s3 -> Mono.just(this.getDelimitIndex(s3)).filterWhen(inx3 -> {
+			if (inx3 > 0) {
+				giveSeqProp.setLocProp(inx3, s3);
+				return this.itemLocationDefService.getIdsByCodes(giveSeqProp.getLocCodes()).map(locIds -> {
+					giveSeqProp.setLocIds(locIds);
+					return true;
 				});
 			}
-			return Mono.empty();
-		}).defaultIfEmpty(giveSeqProp);
+			return Mono.just(false);
+		}).map(inx3 -> giveSeqProp)).defaultIfEmpty(giveSeqProp);
 	}
 
 	private int getDelimitIndex(String s) {
@@ -169,14 +162,19 @@ public class VHoldClientService {
 	}
 
 	public Mono<HoldClient> addHoldClient(HoldClient holdClient) {
-		return this.calVolTemplate
-				.selectOne(query(where(SITE_CODE).is(holdClient.getSiteCode()).and("name").is(holdClient.getName())),
-						HoldClient.class)
-				.switchIfEmpty(this.calVolTemplate.insert(holdClient).doOnNext(this::redisVHoldClient))
-				.flatMap(hc -> this.getSeqNumById(hc.getId()).map(ClientSequence::getSeqNum).map(seqNum -> {
-					hc.setCurrentSeq(seqNum);
-					return hc;
-				}));
+		log.info("{}", holdClient);
+		return this.itemSiteDefService.getIdByCode(holdClient.getSiteCode()).flatMap(siteId -> {
+			log.info("{}", siteId);
+			return this.calVolTemplate
+					.selectOne(
+							query(where(SITE_CODE).is(holdClient.getSiteCode()).and("name").is(holdClient.getName())),
+							HoldClient.class)
+					.switchIfEmpty(this.calVolTemplate.insert(holdClient).doOnNext(this::redisVHoldClient))
+					.flatMap(hc -> this.getSeqNumById(hc.getId()).map(ClientSequence::getSeqNum).map(seqNum -> {
+						hc.setCurrentSeq(seqNum);
+						return hc;
+					}));
+		});
 	}
 
 	public Mono<HoldClient> updateHoldClient(HoldClient nhc, Integer seqNum) {
@@ -198,7 +196,8 @@ public class VHoldClientService {
 
 	private void redisVHoldClient(HoldClient holdClient) {
 		String idString = String.format(HOLDCLIENT_PREFIX, holdClient.getId());
-		this.redisUtils.redisLockCache(idString, this.convertHoldClient(holdClient), null).subscribe();
+		this.convertHoldClient(holdClient).flatMap(vhc -> this.redisUtils.redisLockCache(idString, vhc, null))
+				.subscribe();
 	}
 
 	private void copyProperty(@NonNull String property, @NonNull HoldClient source, @NonNull HoldClient target) {
@@ -226,6 +225,10 @@ public class VHoldClientService {
 			cs.setSeqNum(sn);
 			return cs;
 		}).flatMap(this.calVolTemplate::update));
+	}
+
+	public Mono<String[]> getTouchCallbackById(String paramId) {
+		return this.redisUtils.getBuketFromRedis(paramId, false, null).cast(String.class).map(s -> s.split("\\|"));
 	}
 
 }

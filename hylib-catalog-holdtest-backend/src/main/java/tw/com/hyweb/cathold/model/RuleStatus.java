@@ -60,8 +60,19 @@ public class RuleStatus implements Serializable {
 		return (this.status & (3 << 28)) > 0;
 	}
 
+	public boolean ruleDepdentUser() {
+		return (this.status & (0x5555 << 16)) > 0;
+	}
+
 	public boolean floatItem() {
 		return (this.status & (1 << 15)) > 0;
+	}
+
+	public void setPropertyStatus(int type, boolean b) {
+		int n = (15 ^ type) << 1;
+		this.status &= (3 << n) ^ -1;
+		if (b)
+			this.status |= 2 << n;
 	}
 
 }
