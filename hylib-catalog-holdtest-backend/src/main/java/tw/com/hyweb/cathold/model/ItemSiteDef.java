@@ -45,6 +45,10 @@ public class ItemSiteDef implements Serializable {
 
 	private int pickupLimit;
 
+	private String floatGroup;
+
+	private boolean floatReceive;
+
 	private int distriSite;
 
 	public ItemSiteDef(short siteId) {
@@ -62,4 +66,5 @@ public class ItemSiteDef implements Serializable {
 	public boolean canExpand(LocalDateTime availDate) {
 		return this.expandAvail ^ availDate.toLocalDate().isBefore(this.availDate);
 	}
+
 }

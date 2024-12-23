@@ -6,6 +6,7 @@ import tw.com.hyweb.cathold.model.Booking;
 import tw.com.hyweb.cathold.model.BookingHistory;
 import tw.com.hyweb.cathold.model.Phase;
 import tw.com.hyweb.cathold.model.view.BookingHistoryView;
+import tw.com.hyweb.cathold.model.view.BookingNclView;
 import tw.com.hyweb.cathold.model.view.BookingView;
 
 public interface BookingViewService {
@@ -23,5 +24,7 @@ public interface BookingViewService {
 	Flux<BookingHistoryView> getReaderOnStopBookingHistories(int readerId, Phase onStopBooking);
 
 	Mono<BookingHistoryView> convert2ExpandBookingView(long bookingId);
+
+	Mono<BookingNclView> convert2BookingNclView(Booking booking);
 
 }

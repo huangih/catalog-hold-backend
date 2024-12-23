@@ -2,7 +2,6 @@ package tw.com.hyweb.cathold.model;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import org.springframework.beans.BeanUtils;
 import org.springframework.data.annotation.Id;
 
 import lombok.Data;
@@ -25,15 +24,15 @@ public class LendLog2 implements Serializable {
 	private int readerId;
 
 	private String status;
-	
-	private char lastType;
 
-	private char lendType;
+	private String lastType;
+
+	private String lendType;
 
 	private String callTypes;
 
 	private int muserId;
-	
+
 	private int preCheck;
 
 	private LocalDateTime begTime;
@@ -44,7 +43,17 @@ public class LendLog2 implements Serializable {
 
 	private LocalDateTime updateTime;
 
-	public LendLog2(LendCallback lendCallback) {
-		BeanUtils.copyProperties(lendCallback, this);
+	public LendLog2(Object[] args) {
+		this.readerId = (int) args[0];
+		this.holdId = (int) args[1];
+		this.muserId = (int) args[3];
 	}
+
+	public LendLog2(int readerId, int holdId, int muserId, LocalDateTime begTime) {
+		this.readerId = readerId;
+		this.holdId = holdId;
+		this.muserId = muserId;
+		this.begTime = begTime;
+	}
+
 }

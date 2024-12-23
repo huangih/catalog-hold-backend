@@ -6,9 +6,9 @@ import tw.com.hyweb.cathold.model.LendCheck;
 
 public interface LendCheckService {
 
-	Mono<LendCallback> prepareLendCheck(LendCallback lendCallback);
-
-	Mono<LendCheck> checkRfidUidMap(LendCallback lendCallback); //查檢RFID UID對照表
+//	Mono<LendCallback> prepareLendCheck(LendLog2 lendLog2);
+//
+	Mono<LendCheck> checkRfidUidMap(LendCallback lendCallback, String barcode); //查檢RFID UID對照表
 
 	Mono<LendCheck> lastItemMissing(LendCallback lendCallback); //是否為有預約者的最後一件去向不明
 
@@ -26,7 +26,7 @@ public interface LendCheckService {
 	
 	Mono<LendCheck> onUserLendCallVolIds(LendCallback lendCallback); //是否為借閱中同一callvolId的書
 	
-	Mono<LendCheck> putLendCallback(LendCallback lendCallback);
+//	Mono<LendCheck> putLendCallback(LendCallback lendCallback);
 
 	void lendCallback(String callbackId);
 

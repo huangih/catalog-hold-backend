@@ -24,18 +24,21 @@ public class LendCheck implements Serializable {
 
 	private char type = '_';
 
+	public LendCheck(char type) {
+		this.type = type;
+	}
+
 	public LendCheck(boolean canLend, String callbackId, char type) {
 		this.canLend = canLend;
 		this.callbackId = callbackId;
 		this.type = type;
 	}
 
-	public LendCheck(boolean canLend) {
-		this.canLend = canLend;
-	}
-
-	public LendCheck(String callbackId) {
+	public LendCheck(String callbackId, char type) {
 		this.callbackId = callbackId;
+		this.canLend = false;
+		this.reason = callbackId + "-Timeout";
+		this.type = type;
 	}
 
 	public LendCheck(String callbackId, LendCallback lendCallback) {
@@ -46,10 +49,6 @@ public class LendCheck implements Serializable {
 			this.reason = lendCallback.getReason();
 			this.type = lendCallback.getType();
 		}
-	}
-
-	public LendCheck(char type) {
-		this.type = type;
 	}
 
 }

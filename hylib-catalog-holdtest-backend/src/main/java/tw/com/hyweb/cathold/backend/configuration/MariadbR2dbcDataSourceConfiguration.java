@@ -39,8 +39,9 @@ public class MariadbR2dbcDataSourceConfiguration {
 	ConnectionPool mariadbConnectionPool() {
 		Map<String, String> map = new HashMap<>();
 		map.put("characterencoding", "utf8");
-		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host("ml-230.tpml.edu.tw")
-				.database("cal_vol_test").username("hyweb").password("1qaz@WSX3edc").connectionAttributes(map).build();
+		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host("tml-230.tpml.edu.tw")
+				.database("cal_vol_test").username("hyweb").password("1qaz@WSX3edc").useServerPrepStmts(true)
+				.prepareCacheSize(512).connectionAttributes(map).build();
 		ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(new MariadbConnectionFactory(conf))
 				.initialSize(1).validationQuery("select 1").maxSize(10).name("cal_vol-pool")
 				.maxValidationTime(Duration.ofMillis(3000)).build();

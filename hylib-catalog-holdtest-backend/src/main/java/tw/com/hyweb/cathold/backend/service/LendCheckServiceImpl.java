@@ -29,7 +29,7 @@ public class LendCheckServiceImpl implements LendCheckService {
 
 	private static final String TRANSIT_OVERDAYS = "transitOverdays";
 
-	private static final List<String> ANNDEX_TYPES = List.of("BA", "AA", "BDA", "HOT-BA");
+	private static final List<String> ANNEX_TYPES = List.of("BA", "AA", "BDA", "HOT-BA");
 
 	private static final String LENDCHECK = "LendCheck";
 
@@ -56,22 +56,9 @@ public class LendCheckServiceImpl implements LendCheckService {
 	private final AmqpBackendClient amqpBackendClient;
 
 	@Override
-	public Mono<LendCallback> prepareLendCheck(LendCallback lendCallback) {
-		return this.lendLog2Service.newLendLog(lendCallback).zipWith(
-				this.vHoldItemService.getVHoldItemById(lendCallback.getHoldId()).defaultIfEmpty(new VHoldItem()),
-				(ll2, vh) -> {
-					lendCallback.setLogId(ll2.getId());
-					if (vh.getHoldId() > 0)
-						lendCallback.setStatus(vh.getStatusCode());
-					return lendCallback;
-				});
-	}
-
-	@Override
-	public Mono<LendCheck> checkRfidUidMap(LendCallback lendCallback) {
+	public Mono<LendCheck> checkRfidUidMap(LendCallback lendCallback, String barcode) {
 		char type = 'F';
 		LendCheck lendCheck = new LendCheck('0');
-		String barcode = lendCallback.getBarcode();
 		if (barcode != null && barcode.length() > 0) {
 			lendCheck.setType(type);
 			return this.amqpBackendClient.checkUidByBarcode(barcode).filter(b -> b)
@@ -86,7 +73,7 @@ public class LendCheckServiceImpl implements LendCheckService {
 							lendCheck.setReason(s);
 						}
 						return lendCheck;
-					});
+					}).timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("checkRfidUidMap", type)));
 		}
 		return Mono.just(lendCheck);
 	}
@@ -108,7 +95,7 @@ public class LendCheckServiceImpl implements LendCheckService {
 										return lendCheck;
 									}));
 				}).defaultIfEmpty(lendCheck)
-				.timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("lastItemMissing")));
+				.timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("lastItemMissing", type)));
 
 	}
 
@@ -125,7 +112,7 @@ public class LendCheckServiceImpl implements LendCheckService {
 					return lendCheck;
 				});
 			return Mono.just(lendCheck);
-		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onAvailBooking")));
+		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("onAvailBooking", type)));
 	}
 
 	@Override
@@ -149,56 +136,54 @@ public class LendCheckServiceImpl implements LendCheckService {
 									return lendCheck;
 								});
 					return Mono.just(lendCheck);
-				}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onTransit")));
-	}
-
-	private Mono<Tuple2<Boolean, Boolean>> checkCMissingLend(LendCallback lendCallback) {
-		return this.transitOverdaysService.existsNonTouchByHoldId(lendCallback.getHoldId())
-				.zipWith(this.userCheckService.checkReaderType(lendCallback.getReaderId(), TRANSIT_OVERDAYS));
+				}).defaultIfEmpty(lendCheck)
+				.timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("onTransit", type)));
 	}
 
 	@Override // 預約待取撤架,若借閱者為原逾期未取者，取消待定記點，否則待定改為記點，可暫訂可借，依接的check
 	public Mono<LendCheck> onBookingAvailRemove(LendCallback lendCallback) {
 		char type = 'O';
-		LendCheck lendCheck = new LendCheck('5');
-		return this.bookingCheckService.onBookingAvailRemove(lendCallback.getHoldId()).map(b -> {
+		LendCheck lendCheck = new LendCheck('4');
+		return this.bookingCheckService.onBookingAvailRemove(lendCallback.getHoldId()).filter(b -> b).map(b -> {
 			lendCheck.setType(type);
 			return lendCheck;
-		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onBookingAvailRemove")));
+		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(3000),
+				Mono.just(new LendCheck("onBookingAvailRemove", type)));
 	}
 
 	@Override
 	public Mono<LendCheck> onUserBooking(LendCallback lendCallback) {
 		char type = 'U';
-		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE);
 		LendCheck lendCheck = new LendCheck('5');
+		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE);
 		int readerId = lendCallback.getReaderId();
 		int hId = lendCallback.getHoldId();
 		return this.bookingCheckService.correctUniqueBooking(readerId, hId, "C")
 				.switchIfEmpty(this.vHoldItemService.getVHoldItemById(hId)
-						.filter(vh -> !ANNDEX_TYPES.contains(vh.getTypeCode())).map(VHoldItem::getCallVolId)
+						.filter(vh -> !ANNEX_TYPES.contains(vh.getTypeCode())).map(VHoldItem::getCallVolId)
 						.flatMap(cvId -> this.bookingCheckService.correctUniqueBooking(readerId, cvId, "T")))
 				.map(bi -> {
 					if (!availPhases.contains(bi.getPhase()))
 						lendCheck.setType(type);
 					return lendCheck;
 				}).defaultIfEmpty(lendCheck)
-				.timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onUserBooking")));
+				.timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("onUserBooking", type)));
 	}
 
 	@Override
 	public Mono<LendCheck> onBookingDistribution(LendCallback lendCallback) {
 		char type = 'D';
 		LendCheck lendCheck = new LendCheck('6');
-		return this.bookingCheckService.onBookingDistribution(lendCallback.getHoldId()).map(b -> {
+		return this.bookingCheckService.onBookingDistribution(lendCallback.getHoldId()).filter(b -> b).map(b -> {
 			lendCheck.setType(type);
 			return lendCheck;
-		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(2000),
-				Mono.just(new LendCheck("onBookingDistribution")));
+		}).defaultIfEmpty(lendCheck).timeout(Duration.ofMillis(3000),
+				Mono.just(new LendCheck("onBookingDistribution", type)));
 	}
 
 	@Override
 	public Mono<LendCheck> onCMissingLend(LendCallback lendCallback) {
+		// 無須callback
 		LendCheck lendCheck = new LendCheck('7');
 		return this.checkCMissingLend(lendCallback).filter(tuple2 -> tuple2.getT1() ^ tuple2.getT2()).flatMap(
 				tup2 -> this.messageMapService.resultPhaseConvert(LENDCHECK, ResultPhase.NOMATCH_CMISSING).map(s -> {
@@ -206,14 +191,20 @@ public class LendCheckServiceImpl implements LendCheckService {
 					lendCheck.setReason(s);
 					return lendCheck;
 				})).defaultIfEmpty(lendCheck)
-				.timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onCMissingLend")));
+				.timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("onCMissingLend", '7')));
+	}
+
+	private Mono<Tuple2<Boolean, Boolean>> checkCMissingLend(LendCallback lendCallback) {
+		return this.transitOverdaysService.existsNonTouchByHoldId(lendCallback.getHoldId())
+				.zipWith(this.userCheckService.checkReaderType(lendCallback.getReaderId(), TRANSIT_OVERDAYS));
 	}
 
 	@Override
-	public Mono<LendCheck> onUserLendCallVolIds(LendCallback lendCallback) {
-		LendCheck lendCheck = new LendCheck('9');
+	public Mono<LendCheck> onUserLendCallVolIds(LendCallback lendCallback) {// 目前北市圖未check
+		// 無須callback
+		LendCheck lendCheck = new LendCheck('8');
 		return Flux.fromIterable(this.sqlserverChargedRepository.findByReaderId(lendCallback.getReaderId()))
-				.map(SqlserverCharged::getHoldId).flatMap(this.vHoldItemService::getVHoldItemById)
+				.map(SqlserverCharged::getHoldId).flatMap(this.vHoldItemService::getVHoldItemById, 1)
 				.map(VHoldItem::getCallVolId).distinct().collectList()
 				.zipWith(this.vHoldItemService.getVHoldItemById(lendCallback.getHoldId()).map(VHoldItem::getCallVolId),
 						Collection::contains)
@@ -224,22 +215,24 @@ public class LendCheckServiceImpl implements LendCheckService {
 							return lendCheck;
 						}))
 				.defaultIfEmpty(lendCheck)
-				.timeout(Duration.ofMillis(2000), Mono.just(new LendCheck("onUserLendCallVolIds")));
+				.timeout(Duration.ofMillis(3000), Mono.just(new LendCheck("onUserLendCallVolIds", '9')));
 	}
 
-	@Override
-	public Mono<LendCheck> putLendCallback(LendCallback lendCallback) {
-		return this.vLendCallBackService.prepareLendCallback(lendCallback)
-				.doOnNext(lc -> this.lendLog2Service.saveLendLog2PreCheck(lendCallback));
-	}
-
+//	@Override
+//	public Mono<LendCheck> putLendCallback(LendCallback lendCallback) {
+//		return this.vLendCallBackService.prepareLendCallback(lendCallback)
+//				.doOnNext(lc -> this.lendLog2Service.saveLendLog2PreCheck(lendCallback));
+//	}
+//
 	@Override
 	public void lendCallback(String callbackId) {
 		this.vLendCallBackService.getLendCallback(callbackId)
-				.doOnNext(lc -> this.lendLog2Service.saveLendLog2Callback(lc.getLogId()))
+				.flatMap(lc -> this.lendLog2Service.saveLendLog2Callback(lc.getLogId()).map(ll2 -> lc))
+				.switchIfEmpty(
+						Mono.just(new LendCallback()).doOnNext(lc0 -> log.warn("nolendCallback: {}", callbackId)))
 				.subscribe(lendCallback -> Flux.fromIterable(lendCallback.getCallbackTypes()).subscribe(type -> {
 					switch (type) {
-					case 'F' -> this.amqpBackendClient.addWhiteUid(lendCallback.getBarcode());
+					case 'F' -> this.amqpBackendClient.addWhiteUid(lendCallback.getHoldId());
 					case 'M' -> this.amqpBackendClient.postMissingLend(lendCallback);
 					case 'B' -> this.amqpBackendClient.postAvailBookingLend(lendCallback);
 					case 'O' -> this.amqpBackendClient.postBookingAvailRemoveLend(lendCallback);

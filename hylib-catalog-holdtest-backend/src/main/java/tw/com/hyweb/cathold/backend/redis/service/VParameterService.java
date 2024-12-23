@@ -28,7 +28,7 @@ public class VParameterService {
 	private static final String RULECLASS_NAME = "ruleClassName";
 
 	private final ReaderTypeRepository readerTypeRepository;
-	
+
 	private final ReactiveRedisUtils redisUtils;
 
 	private final R2dbcEntityOperations calVolTemplate;
@@ -45,8 +45,10 @@ public class VParameterService {
 	}
 
 	public Mono<List<Integer>> getSiteIdsByRuleSiteCodes(String paramName) {
-		return this.getParameters(paramName, Integer.class, code -> this.calVolTemplate
-				.selectOne(query(where("siteCode").is(code)), ItemSiteDef.class).map(ItemSiteDef::getSiteId));
+		return this.getParameters(paramName, Integer.class,
+				code -> this.calVolTemplate
+						.selectOne(query(where("siteCode").is(code)).columns("siteId"), ItemSiteDef.class)
+						.map(ItemSiteDef::getSiteId));
 	}
 
 	public Mono<List<Phase>> getPhasesFromRuleName(String paramName) {
@@ -70,13 +72,16 @@ public class VParameterService {
 	}
 
 	public Flux<String> getParametersFromDb(String ruleClassName) {
-		return this.calVolTemplate.select(query(where(RULECLASS_NAME).is(ruleClassName)), CatalogHoldRule.class)
+		return this.getRuleByRuleClassName(ruleClassName)
 				.flatMapSequential(cr -> Flux.fromArray(cr.getRuleExp().split(",")));
 	}
 
-	public Flux<String> getLikeRuleNames(String ruleClass) {
-		return this.calVolTemplate.select(query(where(RULECLASS_NAME).like(ruleClass + "%")), CatalogHoldRule.class)
-				.map(CatalogHoldRule::getRuleClassName);
+	public Flux<CatalogHoldRule> getRulesByLikeRuleNames(String ruleClass) {
+		return this.calVolTemplate.select(query(where(RULECLASS_NAME).like(ruleClass + "%")), CatalogHoldRule.class);
+	}
+
+	public Flux<CatalogHoldRule> getRuleByRuleClassName(String ruleClassName) {
+		return this.calVolTemplate.select(query(where(RULECLASS_NAME).is(ruleClassName)), CatalogHoldRule.class);
 	}
 
 }

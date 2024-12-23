@@ -25,7 +25,7 @@ public class VCallVolHoldSummaryService {
 	private static final String MARCALLVOL_CALLVOLID = "mcv:callVolId:%d:MarcCallVolume";
 
 	private final UserCheckService userCheckService;
-	
+
 	private final SqlserverChargedRepository sqlserverChargedRepository;
 
 	private final VBookingService vBookingService;
@@ -50,7 +50,7 @@ public class VCallVolHoldSummaryService {
 		String idString = String.format(CVHS_CALLVOLID, callVolId);
 		return this.vHoldItemsService.findNonShadowHoldItemByCallVolId(callVolId).collectList()
 				.flatMap(vhis -> this.refreshCallVolHoldSummary(callVolId, vhis))
-				.doOnNext(cvhs -> this.redisUtils.redisLockCache(idString, cvhs, null));
+				.doOnNext(cvhs -> this.redisUtils.redisLockCache(idString, cvhs, null).subscribe());
 	}
 
 	private Mono<CallVolHoldSummary> refreshCallVolHoldSummary(int callVolId, @NonNull List<VHoldItem> vhis) {

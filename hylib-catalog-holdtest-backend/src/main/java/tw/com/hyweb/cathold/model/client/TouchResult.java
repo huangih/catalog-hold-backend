@@ -41,4 +41,10 @@ public class TouchResult implements Serializable {
 		this.noticeResult = noticeResult;
 	}
 
+	public TouchResult(char type, Serializable object) {
+		this.type = type;
+		this.resultClass = object.getClass();
+		this.resultObject = object;
+	}
+
 }

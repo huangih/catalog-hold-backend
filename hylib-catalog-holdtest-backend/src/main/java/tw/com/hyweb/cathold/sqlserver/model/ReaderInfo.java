@@ -31,11 +31,9 @@ public class ReaderInfo implements Serializable {
 	private String readerSex;
 	
 	@Column(name = "readertypeid")
-	private int readertypeId;
+	private int readerTypeId;
 
 	private LocalDateTime birth;
-
-	private long sirsiid;
 
 	private boolean homedeliverytype;
 	

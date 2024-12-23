@@ -70,7 +70,7 @@ public class CallVolHoldSummary extends HoldSummary {
 	}
 
 	public boolean isRenewableLend(int overNum, int waitBookingNum) {
-		int num = this.onShelveHolds.stream().filter(VHoldItem::allowBooking).toList().size();
+		int num = (int) this.onShelveHolds.stream().filter(VHoldItem::allowBooking).count();
 		return (num - waitBookingNum) >= overNum || waitBookingNum == 0;
 	}
 

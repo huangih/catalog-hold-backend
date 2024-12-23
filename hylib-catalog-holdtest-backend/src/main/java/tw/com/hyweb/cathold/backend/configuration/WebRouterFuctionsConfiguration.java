@@ -10,6 +10,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 
 import org.springframework.web.reactive.function.server.ServerResponse;
 
+import tw.com.hyweb.cathold.backend.controller.CatHoldManagerService;
 import tw.com.hyweb.cathold.backend.controller.CatvolBookingService;
 
 @Configuration
@@ -31,4 +32,20 @@ public class WebRouterFuctionsConfiguration {
 		;
 	}
 
+	@Bean
+	RouterFunction<ServerResponse> catholdManagerRouter(CatHoldManagerService catHoldManagerService) {
+		return RouterFunctions.nest(RequestPredicates.path("/managerControl"),
+				this.catHoldManagerRouters(catHoldManagerService));
+	}
+
+	private RouterFunction<ServerResponse> catHoldManagerRouters(CatHoldManagerService catHoldManagerService) {
+		return RouterFunctions.route(GET("/refreshAllRuleStatuses"), catHoldManagerService::refreshAllRuleStatuses)
+				.andRoute(POST("/setNotHotBooking"), catHoldManagerService::setNotHotBooking)
+				.andRoute(GET("/bookingPickupSiteClose"), catHoldManagerService::bookingPickupSiteClose)
+				.andRoute(GET("/bookingPickupSiteReopen"), catHoldManagerService::bookingPickupSiteReopen)
+				.andRoute(GET("/siteUidBarcodeCount"), catHoldManagerService::siteUidBarcodeCount)
+				.andRoute(GET("/correctAnnexStatus"), catHoldManagerService::correctAnnexStatus)
+				.andRoute(GET("/delRedisCache"), catHoldManagerService::delRedisCache)
+				.andRoute(GET("/getBookingViewForNcl"), catHoldManagerService::getBookingViewForNcl);
+	}
 }

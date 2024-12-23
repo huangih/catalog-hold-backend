@@ -4,18 +4,22 @@ import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Criteria.where;
 import static org.springframework.data.relational.core.query.Query.query;
 
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.model.VHotBookingDate;
 import tw.com.hyweb.cathold.model.VMarcCallVolume;
-import tw.com.hyweb.cathold.model.view.MarcVolume;
+import tw.com.hyweb.cathold.backend.service.AmqpBackendClient;
 import tw.com.hyweb.cathold.model.MarcCallVolume;
+import tw.com.hyweb.cathold.model.view.MarcVolume;
 
-@Service
+@Component
 @RequiredArgsConstructor
 public class VMarcCallVolumeService {
+
+	private static final String CALLVOLIDS_MARCID = "mcv:marcId:%d:cvIds";
 
 	private static final String MARCALLVOL_CALLVOLID = "mcv:callVolId:%d:marcCallVol";
 
@@ -26,6 +30,15 @@ public class VMarcCallVolumeService {
 	private final R2dbcEntityOperations calVolTemplate;
 
 	private final ReactiveRedisUtils redisUtils;
+
+	private final AmqpBackendClient amqpBackendClient;
+
+	public Flux<MarcCallVolume> getMarcCallVolumesByMarcId(int marcId) {
+		String idString = String.format(CALLVOLIDS_MARCID, marcId);
+		return this.redisUtils.getFluxFromRedis(idString, true).cast(Integer.class)
+				.flatMap(this::getMarcCallVolumeByCallVolId).switchIfEmpty(
+						this.amqpBackendClient.getMarcCallVolumesByMarcId(marcId).flatMapMany(Flux::fromIterable));
+	}
 
 	public Mono<MarcCallVolume> getMarcCallVolumeByCallVolId(int callVolId) {
 		String idString = String.format(MARCALLVOL_CALLVOLID, callVolId);

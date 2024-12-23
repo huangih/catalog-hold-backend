@@ -44,6 +44,8 @@ public class VHoldItem implements Serializable {
 
 	private String siteCode;
 
+	private String floatGroup;
+
 	private int locId;
 
 	private Integer keeproomId;
@@ -52,10 +54,12 @@ public class VHoldItem implements Serializable {
 
 	private int statusId;
 
-	@Column( "status")
+	@Column("status")
 	private String statusCode;
 
 	private int tempStatus;
+
+	private int oriSiteId;
 
 	private RuleStatus ruleStatus;
 

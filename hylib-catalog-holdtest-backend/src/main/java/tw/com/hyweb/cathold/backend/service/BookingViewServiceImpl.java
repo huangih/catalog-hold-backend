@@ -7,6 +7,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Query.query;
 import static org.springframework.data.relational.core.query.Criteria.where;
@@ -29,8 +31,10 @@ import tw.com.hyweb.cathold.model.Intransit;
 import tw.com.hyweb.cathold.model.Phase;
 import tw.com.hyweb.cathold.model.VHoldItem;
 import tw.com.hyweb.cathold.model.view.BookingHistoryView;
+import tw.com.hyweb.cathold.model.view.BookingNclView;
 import tw.com.hyweb.cathold.model.view.BookingView;
 import tw.com.hyweb.cathold.model.view.IntransitView;
+import tw.com.hyweb.cathold.model.view.MarcVolume;
 
 @RequiredArgsConstructor
 public class BookingViewServiceImpl implements BookingViewService {
@@ -38,9 +42,9 @@ public class BookingViewServiceImpl implements BookingViewService {
 	private static final List<Phase> AVAIL_PHASES = Arrays.asList(Phase.AVAILABLE, Phase.A01_ORDER);
 
 	private static final String USER_ID = "userId";
-	
+
 	private static final String BOOKING_ID = "bookingId";
-	
+
 	private final VBookingService vBookingService;
 
 	private final VHoldItemService vHoldItemService;
@@ -155,8 +159,10 @@ public class BookingViewServiceImpl implements BookingViewService {
 								bookingHistoryView.setComment(bc.getComment());
 								return bookingHistoryView;
 							}).defaultIfEmpty(bookingHistoryView);
-				}).flatMap(bhv -> this.calVolTemplate
-						.selectOne(query(where(BOOKING_ID).is(bookingHistory.getId())), BookingAvailation.class).map(ba -> {
+				})
+				.flatMap(bhv -> this.calVolTemplate
+						.selectOne(query(where(BOOKING_ID).is(bookingHistory.getId())), BookingAvailation.class)
+						.map(ba -> {
 							bhv.setNoticeId(ba.getNoticeId());
 							return bhv;
 						}).defaultIfEmpty(bhv));
@@ -169,12 +175,11 @@ public class BookingViewServiceImpl implements BookingViewService {
 			Stream.of(Phase.OVERDUE_BOOKING, Phase.OVERDUE_BOOKING_WAITING, Phase.ON_STOP_BOOKING).forEach(phases::add);
 			if (overNotAvail)
 				Stream.of(Phase.OVERDUE_CANCEL, Phase.END_STOP_BOOKING, Phase.OVERDUE_OVER_AVAIL).forEach(phases::add);
-			return this.calVolTemplate
-					.select(query(where(USER_ID).is(readerId).and("phase").in(phases)), BookingHistory.class)
-					.sort(Comparator.comparing(BookingHistory::getUpdateTime).reversed());
+			return this.calVolTemplate.select(query(where(USER_ID).is(readerId).and("phase").in(phases))
+					.sort(Sort.by(Direction.DESC, "updateTime")), BookingHistory.class);
 		}
-		return this.calVolTemplate.select(query(where(USER_ID).is(readerId)), BookingHistory.class)
-				.sort(Comparator.comparing(BookingHistory::getUpdateTime).reversed());
+		return this.calVolTemplate.select(
+				query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, "updateTime")), BookingHistory.class);
 	}
 
 	private Mono<BookingView> convBookingViewPhase(BookingView bookingView, Booking booking) {
@@ -236,8 +241,9 @@ public class BookingViewServiceImpl implements BookingViewService {
 	@Override
 	public Flux<BookingHistoryView> getReaderOnStopBookingHistories(int readerId, Phase onStopBooking) {
 		return this.calVolTemplate
-				.select(query(where(USER_ID).is(readerId).and("phase").is(onStopBooking)), BookingHistory.class)
-				.sort(Comparator.comparing(BookingHistory::getInActiveDate)).flatMap(this::convert2BookingView);
+				.select(query(where(USER_ID).is(readerId).and("phase").is(onStopBooking)).sort(Sort.by("inActiveDate")),
+						BookingHistory.class)
+				.flatMap(this::convert2BookingView);
 	}
 
 	@Override
@@ -246,6 +252,15 @@ public class BookingViewServiceImpl implements BookingViewService {
 				.selectOne(query(where("id").is(bookingId)), BookingHistory.class).switchIfEmpty(this.calVolTemplate
 						.selectOne(query(where("id").is(bookingId)), Booking.class).map(BookingHistory::new))
 				.flatMap(this::convert2BookingView);
+	}
+
+	@Override
+	public Mono<BookingNclView> convert2BookingNclView(Booking booking) {
+		return this.vMarcCallVolumeService.getMarcCallVolumeByCallVolId(booking.getItemId()).map(mcv -> {
+			BookingNclView bnv = new BookingNclView(booking);
+			bnv.setMarcVolume(new MarcVolume(mcv));
+			return bnv;
+		});
 	}
 
 }

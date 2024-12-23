@@ -1,10 +1,8 @@
 package tw.com.hyweb.cathold.backend.service;
 
+import org.springframework.data.domain.Sort;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Query.query;
-
-import java.util.Comparator;
-
 import static org.springframework.data.relational.core.query.Criteria.where;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -47,9 +45,9 @@ public class BookingCheckServiceImpl implements BookingCheckService {
 	@Override
 	public Mono<Booking> correctUniqueBooking(int readerId, int itemId, String type) {
 		return this.calVolTemplate
-				.select(query(where("userId").is(readerId).and("itemId").is(itemId).and("type").is(type)),
-						Booking.class)
-				.sort(Comparator.comparing(Booking::getPlaceDate)).collectList().filter(li -> !li.isEmpty()).map(li -> {
+				.select(query(where("userId").is(readerId).and("itemId").is(itemId).and("type").is(type))
+						.sort(Sort.by("placeDate")), Booking.class)
+				.collectList().filter(li -> !li.isEmpty()).map(li -> {
 					Booking booking = li.removeFirst();
 					Flux.fromIterable(li).subscribe(bi -> this.calVolTemplate.delete(bi).subscribe());
 					return booking;

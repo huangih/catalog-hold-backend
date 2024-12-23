@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.time.LocalDate;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -11,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@Table("vhot_booking_date")
 @NoArgsConstructor
 public class VHotBookingDate implements Serializable {
 

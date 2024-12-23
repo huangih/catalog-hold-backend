@@ -36,7 +36,6 @@ public class VSpecReaderidCachService {
 		return this.vParameterService.getParameters(ruleName, Integer.class,
 				typeCode -> Mono.justOrEmpty(this.readerTypeRepository.findByReaderTypeCode(typeCode))
 						.map(ReaderType::getReaderTypeId));
-
 	}
 
 }

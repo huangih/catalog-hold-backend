@@ -5,6 +5,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
@@ -50,37 +51,40 @@ public class VHoldClientService {
 	public Mono<VHoldClient> getVHoldClientById(int holdClientId) {
 		String idString = String.format(HOLDCLIENT_PREFIX, holdClientId);
 		return this.redisUtils.getMonoFromRedis(idString, null).map(VHoldClient.class::cast)
-				.switchIfEmpty(this.redisUtils.getMonoFromDatabase(idString,
+				.switchIfEmpty(this.redisUtils.redisMonoSupplierCache(idString,
 						() -> this.calVolTemplate.selectOne(query(where("id").is(holdClientId)), HoldClient.class)
 								.flatMap(this::convertHoldClient),
 						null));
 	}
 
 	private Mono<VHoldClient> convertHoldClient(@NonNull HoldClient holdClient) {
-		VHoldClient vhc = new VHoldClient(holdClient.getId(), holdClient.isTransitDouble());
-		vhc.setAvailSeqRange(new SeqRange(holdClient.getSeqRange()));
-		return Mono.justOrEmpty(holdClient.getNoIntransitSites())
-				.flatMap(s -> this.itemSiteDefService.getOrderIdsByCodes(List.of(s.split(","))))
-				.filter(siteIds -> !siteIds.isEmpty())
-				.switchIfEmpty(this.itemSiteDefService.getIdByCode(holdClient.getSiteCode()).map(List::of))
-				.flatMap(siteIds -> {
-					vhc.setNoIntransitSites(siteIds);
-					return Mono.justOrEmpty(holdClient.getGiveSeqProp());
-				}).flatMap(this::parseGiveSeqProp).flatMap(gsp -> {
-					vhc.setGiveSeqProp(gsp);
-					return this.convertNoticeProp(holdClient.getNoticeTypes(), this.itemTypeDefService);
-				}).switchIfEmpty(this.convertNoticeProp(holdClient.getNoticeTypes(), this.itemTypeDefService))
-				.flatMap(nTypeMap -> {
-					vhc.setNoticeTypesMap(nTypeMap);
-					return this.convertNoticeProp(holdClient.getNoticeSites(), this.itemSiteDefService);
-				}).flatMap(nSiteMap -> {
-					vhc.setNoticeSitesMap(nSiteMap);
-					return this.convertNoticeProp(holdClient.getNoticeLocations(), this.itemLocationDefService);
-				}).map(nLocMap -> {
-					vhc.setNoticeLocsMap(nLocMap);
-					log.info("{}", vhc);
-					return vhc;
-				});
+		return this.itemSiteDefService.getSiteDefBySiteCode(holdClient.getSiteCode()).flatMap(siteDef -> {
+			VHoldClient vhc = new VHoldClient(siteDef, holdClient);
+			vhc.setAvailSeqRange(new SeqRange(holdClient.getSeqRange()));
+			return this.itemSiteDefService.getOrderIdsByCodes(List.of(holdClient.getNoIntransitSites().split(",")))
+					.map(siteIds -> {
+						if (siteIds.isEmpty())
+							siteIds = List.of(siteDef.getSiteId());
+						vhc.setNoIntransitSites(siteIds);
+						return holdClient.getGiveSeqProp();
+					}).flatMap(s -> this.parseGiveSeqProp(s).map(gsp -> {
+						vhc.setGiveSeqProp(gsp);
+						return this.nextParameter(holdClient.getNoticeTypes());
+					})).flatMap(s1 -> this.convertNoticeProp(s1, itemTypeDefService).map(nTypeMap -> {
+						vhc.setNoticeTypesMap(nTypeMap);
+						return this.nextParameter(holdClient.getNoticeSites());
+					})).flatMap(s2 -> this.convertNoticeProp(s2, itemSiteDefService).map(nSiteMap -> {
+						vhc.setNoticeSitesMap(nSiteMap);
+						return this.nextParameter(holdClient.getNoticeLocations());
+					})).flatMap(s3 -> this.convertNoticeProp(s3, itemLocationDefService).map(nLocsMap -> {
+						vhc.setNoticeLocsMap(nLocsMap);
+						return vhc;
+					}).defaultIfEmpty(vhc));
+		});
+	}
+
+	private String nextParameter(String parameter) {
+		return parameter != null ? parameter : "";
 	}
 
 	private Mono<GiveSeqProp> parseGiveSeqProp(@NonNull String s) {
@@ -163,18 +167,14 @@ public class VHoldClientService {
 
 	public Mono<HoldClient> addHoldClient(HoldClient holdClient) {
 		log.info("{}", holdClient);
-		return this.itemSiteDefService.getIdByCode(holdClient.getSiteCode()).flatMap(siteId -> {
-			log.info("{}", siteId);
-			return this.calVolTemplate
-					.selectOne(
-							query(where(SITE_CODE).is(holdClient.getSiteCode()).and("name").is(holdClient.getName())),
-							HoldClient.class)
-					.switchIfEmpty(this.calVolTemplate.insert(holdClient).doOnNext(this::redisVHoldClient))
-					.flatMap(hc -> this.getSeqNumById(hc.getId()).map(ClientSequence::getSeqNum).map(seqNum -> {
-						hc.setCurrentSeq(seqNum);
-						return hc;
-					}));
-		});
+		return this.calVolTemplate
+				.selectOne(query(where(SITE_CODE).is(holdClient.getSiteCode()).and("name").is(holdClient.getName())),
+						HoldClient.class)
+				.switchIfEmpty(this.calVolTemplate.insert(holdClient).doOnNext(this::redisVHoldClient))
+				.flatMap(hc -> this.getSeqNumById(hc.getId()).map(ClientSequence::getSeqNum).map(seqNum -> {
+					hc.setCurrentSeq(seqNum);
+					return hc;
+				}));
 	}
 
 	public Mono<HoldClient> updateHoldClient(HoldClient nhc, Integer seqNum) {
@@ -187,6 +187,7 @@ public class VHoldClientService {
 			this.copyProperty("noticeTypes", nhc, hc);
 			this.copyProperty("noticeLocations", nhc, hc);
 			this.copyProperty("transitDouble", nhc, hc);
+			this.copyProperty("toFloatLoc", nhc, hc);
 			return this.setHoldClientSeqNum(nhc.getId(), seqNum).map(ClientSequence::getSeqNum).flatMap(sn -> {
 				hc.setCurrentSeq(sn);
 				return this.calVolTemplate.update(hc);
@@ -214,7 +215,7 @@ public class VHoldClientService {
 	}
 
 	private Mono<ClientSequence> setHoldClientSeqNum(int holdClientId, Integer seqNum) {
-		return this.getVHoldClientById(holdClientId).filter(vhc -> seqNum != null).map(vhc -> {
+		return this.getVHoldClientById(holdClientId).filter(Objects::nonNull).map(vhc -> {
 			SeqRange seqRange = vhc.getAvailSeqRange();
 			if (seqRange.getMinNum() > seqNum)
 				return seqRange.getMinNum();

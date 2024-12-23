@@ -9,7 +9,7 @@ import tw.com.hyweb.cathold.sqlserver.model.ReaderType;
 
 public interface ReaderTypeRepository extends ReadOnlyRepository<ReaderType, Integer> {
 
-	List<ReaderType> findByReaderTypeId(int readerTypeId);
+	Optional<ReaderType> findByReaderTypeId(int readerTypeId);
 
 	Streamable<ReaderType> findByReaderTypeCodeIn(List<String> lastitemReadertype);
 

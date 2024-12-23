@@ -1,5 +1,6 @@
 package tw.com.hyweb.cathold.backend.configuration;
 
+import java.util.Map;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.AsyncAmqpTemplate;
 import org.springframework.amqp.core.Binding;
@@ -21,9 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.PropertySource;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import net.bytebuddy.utility.RandomString;
 import tw.com.hyweb.cathold.backend.service.AmqpBackendService;
 import tw.com.hyweb.cathold.backend.service.FuncNameHeaderListener;
@@ -38,10 +37,14 @@ public class AmqpConfiguration {
 	@Value("${cathold.exchange.fanout.name}")
 	private String fanoutExchangeName;
 
+	@Value("${cathold.exchange.stream.name}")
+	private String streamExchangeName;
+
 	@Value("${cathold.backend.routekey}")
 	private String beRouteKey;
 
 	@Bean
+	@Primary
 	DirectExchange directExchange() {
 		return new DirectExchange(exchangeName);
 	}
@@ -49,6 +52,11 @@ public class AmqpConfiguration {
 	@Bean
 	FanoutExchange fanoutExchange() {
 		return new FanoutExchange(fanoutExchangeName);
+	}
+
+	@Bean
+	DirectExchange streamExchange() {
+		return new DirectExchange(this.streamExchangeName, true, false, Map.of("x-super-stream", true));
 	}
 
 	@Bean

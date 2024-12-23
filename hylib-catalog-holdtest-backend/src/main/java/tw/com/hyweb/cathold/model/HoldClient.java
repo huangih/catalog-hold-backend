@@ -42,6 +42,8 @@ public class HoldClient implements Serializable {
 
 	private boolean transitDouble;
 
+	private boolean toFloatLoc;
+	
 	@Transient
 	@Builder.Default
 	private int currentSeq = 0;
@@ -56,17 +58,4 @@ public class HoldClient implements Serializable {
 		this.id = id;
 	}
 
-//	public HoldClient(String siteCode, String name, String noIntransitSites, String giveSeqProp, String seqRange,
-//			String noticeSites, String noticeTypes, String noticeLocations, boolean transitDouble) {
-//		this.siteCode = siteCode;
-//		this.name = name;
-//		this.noIntransitSites = noIntransitSites;
-//		this.giveSeqProp = giveSeqProp;
-//		this.seqRange = seqRange;
-//		this.noticeSites = noticeSites;
-//		this.noticeTypes = noticeTypes;
-//		this.noticeLocations = noticeLocations;
-//		this.transitDouble = transitDouble;
-//	}
-//
 }

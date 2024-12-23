@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.3.4'
+	id 'org.springframework.boot' version '3.4.1'
 	id 'io.spring.dependency-management' version '1.1.6'
 }
 
@@ -25,10 +25,11 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
+	implementation 'org.springframework.amqp:spring-rabbit-stream'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
-	implementation 'org.redisson:redisson-spring-boot-starter:3.36.0'
+	implementation 'org.redisson:redisson-spring-boot-starter:3.40.2'
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 	implementation 'org.mariadb:r2dbc-mariadb'
 	compileOnly 'org.projectlombok:lombok'

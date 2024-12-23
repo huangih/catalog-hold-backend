@@ -17,6 +17,7 @@ import org.redisson.api.RKeysReactive;
 import org.redisson.api.RListReactive;
 import org.redisson.api.RLockReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.options.KeysScanOptions;
 import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -212,7 +213,7 @@ public class ReactiveRedisUtils {
 
 	public void unlinkKeys(String pattern) {
 		RKeysReactive rKeys = this.client.getKeys();
-		rKeys.getKeysByPattern(pattern).flatMap(rKeys::unlink).subscribe();
+		rKeys.getKeys(KeysScanOptions.defaults().pattern(pattern)).flatMap(rKeys::unlink, 8).subscribe();
 	}
 
 }

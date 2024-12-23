@@ -1,23 +1,18 @@
 package tw.com.hyweb.cathold.model;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.springframework.data.annotation.Transient;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Slf4j
@@ -30,45 +25,36 @@ public class LendCallback implements Serializable {
 
 	private static final List<Character> TYPES = Arrays.asList('F', 'M', 'B', 'T', 'O', 'U', 'D', '7', '9');
 
-	@Transient
-	@JsonIgnore
-	private final Object checkLock = new Object();
-
 	public static char compLastType(char lastType) {
-		return TYPES.get(lastType - '1');
+		return TYPES.get(lastType - '0');
 	}
 
 	private int readerId;
 
 	private int holdId;
 
-	private String barcode;
-
-	private String status;
-
 	private int muserId;
 
-	@Builder.Default
 	private List<Character> callbackTypes = new ArrayList<>();
 
-	@Builder.Default
 	private int canotLendIndex = Integer.MAX_VALUE;
 
 	private String reason;
-
-	private LocalDateTime begTime;
 
 	private int logId;
 
 	private char lastType;
 
-	@Synchronized("checkLock")
-	public boolean lendCheck(LendCheck lendCheck) {
-		String error = lendCheck.getCallbackId();
-		if (error != null) {
-			log.error("LendCallback-Timeout: {}-{}", error, this);
-			return false;
-		}
+	public LendCallback(LendLog2 lendLog2) {
+		this.logId = lendLog2.getId();
+		this.readerId = lendLog2.getReaderId();
+		this.holdId = lendLog2.getHoldId();
+		this.muserId = lendLog2.getMuserId();
+	}
+
+	public Mono<Boolean> lendCheck(LendCheck lendCheck) {
+		if (lendCheck.getCallbackId() != null)
+			log.error("LendCallback-Timeout: {}-{}", lendCheck.getCallbackId(), this);
 		this.lastType = lendCheck.getType();
 		if ('@' < this.lastType)
 			callbackTypes.add(this.lastType);
@@ -79,7 +65,7 @@ public class LendCallback implements Serializable {
 				this.reason = lendCheck.getReason();
 			}
 		}
-		return true;
+		return Mono.just(true);
 	}
 
 	@JsonIgnore

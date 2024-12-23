@@ -1,6 +1,8 @@
 cathold:
   exchange:
     name: hold.exchange
+    stream:
+      name: hold.stream.exchange
     fanout:
       name: hold.touch.exchange
   bookingTransit:

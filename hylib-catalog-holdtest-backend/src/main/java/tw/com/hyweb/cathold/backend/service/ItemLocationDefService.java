@@ -19,16 +19,18 @@ public class ItemLocationDefService implements HoldClientPropConverter {
 
 	@Override
 	public Mono<NoticeProp> setNoticePropId(NoticeProp noticeProp) {
-	return	this.calVolTemplate.selectOne(query(where("locationCode").is(noticeProp.getCode())), TplLocationDef.class).map(locationDef->{
-			noticeProp.setId(locationDef.getId());
-			return noticeProp;
-		}).defaultIfEmpty(noticeProp);
+		return this.calVolTemplate
+				.selectOne(query(where("locationCode").is(noticeProp.getCode())), TplLocationDef.class)
+				.map(locationDef -> {
+					noticeProp.setId(locationDef.getId());
+					return noticeProp;
+				}).defaultIfEmpty(noticeProp);
 	}
 
 	@Override
 	public Mono<List<Integer>> getIdsByCodes(List<String> locCodes) {
-		return this.calVolTemplate.select(query(where("locationCode").in(locCodes)),TplLocationDef.class).map(TplLocationDef::getId)
-				.collectList();
+		return this.calVolTemplate.select(query(where("locationCode").in(locCodes)).columns("id"), TplLocationDef.class)
+				.map(TplLocationDef::getId).collectList();
 	}
 
 }

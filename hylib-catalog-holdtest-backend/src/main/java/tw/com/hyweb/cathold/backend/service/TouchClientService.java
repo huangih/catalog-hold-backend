@@ -1,13 +1,12 @@
 package tw.com.hyweb.cathold.backend.service;
 
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple3;
 import tw.com.hyweb.cathold.model.client.PreTouchResult;
 import tw.com.hyweb.cathold.model.client.TouchResult;
 
 public interface TouchClientService {
 
-	Mono<TouchResult> touchHoldItem(Tuple3<String, String, Integer> args);
+	Mono<TouchResult> touchHoldItem(String barcode, String sessionId, int muserId);
 
 	void preTouchCallback(String touchId, PreTouchResult preTouchResult);
 

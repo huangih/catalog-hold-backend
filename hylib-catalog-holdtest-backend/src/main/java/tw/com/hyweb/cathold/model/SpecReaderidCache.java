@@ -25,6 +25,6 @@ public class SpecReaderidCache implements Serializable {
 
 	public SpecReaderidCache(ReaderInfo readerInfo) {
 		this.readerId = readerInfo.getReaderId();
-		this.readerType = readerInfo.getReadertypeId();
+		this.readerType = readerInfo.getReaderTypeId();
 	}
 }

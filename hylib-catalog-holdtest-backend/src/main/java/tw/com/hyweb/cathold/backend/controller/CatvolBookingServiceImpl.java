@@ -26,7 +26,9 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<Integer> param2 = Mono.justOrEmpty(request.queryParam("muserId")).map(Integer::parseInt)
 				.defaultIfEmpty(500);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
-				.body(Mono.zip(param0, param1, param2).flatMap(this.touchClientService::touchHoldItem), TouchResult.class)
+				.body(Mono.zip(param0, param1, param2).flatMap(
+						tup3 -> this.touchClientService.touchHoldItem(tup3.getT1(), tup3.getT2(), tup3.getT3())),
+						TouchResult.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 

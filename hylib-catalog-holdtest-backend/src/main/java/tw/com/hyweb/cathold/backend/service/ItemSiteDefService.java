@@ -40,28 +40,17 @@ public class ItemSiteDefService implements HoldClientPropConverter {
 	public Mono<List<Integer>> getOrderIdsByCodes(List<String> siteCodes) {
 		return Flux.fromIterable(siteCodes)
 				.flatMapSequential(code -> this.calVolTemplate
-						.selectOne(query(where(SITE_CODE).is(code)), ItemSiteDef.class).map(ItemSiteDef::getSiteId))
+						.selectOne(query(where(SITE_CODE).is(code)).columns("siteId"), ItemSiteDef.class)
+						.map(ItemSiteDef::getSiteId))
 				.collectList();
 	}
 
-//	public String getCodeById(int siteId) {
-//		String siteCode = "Unknown";
-//		ItemSiteDef siteDef = this.itemSiteDefRepository.findById(siteId).orElse(null);
-//		if (siteDef != null)
-//			siteCode = siteDef.getSiteCode();
-//		return siteCode;
-//	}
-//
-//	public boolean allowExpandDueDateBySiteIdAndAvailDate(int siteId, LocalDateTime availDate) {
-//		ItemSiteDef itemSiteDef = this.itemSiteDefRepository.findBySiteId(siteId).orElse(null);
-//		if (itemSiteDef != null)
-//			return itemSiteDef.isExpandAvail() && availDate.toLocalDate().isBefore(itemSiteDef.getAvailDate());
-//		return true;
-//	}
-//
 	public Mono<Integer> getIdByCode(String siteCode) {
-		return this.calVolTemplate.selectOne(query(where(SITE_CODE).is(siteCode)), ItemSiteDef.class)
-				.map(ItemSiteDef::getSiteId);
+		return this.getSiteDefBySiteCode(siteCode).map(ItemSiteDef::getSiteId);
+	}
+
+	public Mono<ItemSiteDef> getSiteDefBySiteCode(String siteCode) {
+		return this.calVolTemplate.selectOne(query(where(SITE_CODE).is(siteCode)), ItemSiteDef.class);
 	}
 
 	public Mono<Boolean> allowExpandDueDateBySiteIdAndAvailDate(int pickupSiteId, LocalDateTime availableDate) {

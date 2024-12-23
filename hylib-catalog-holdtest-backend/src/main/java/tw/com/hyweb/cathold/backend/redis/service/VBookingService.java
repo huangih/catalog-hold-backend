@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
+
+import org.springframework.data.domain.Sort;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Query.query;
 import static org.springframework.data.relational.core.query.Criteria.where;
@@ -40,9 +42,8 @@ public class VBookingService {
 
 	public Flux<Booking> getVCallvolBookingsFromDb(int callVolId) {
 		return this.calVolTemplate
-				.select(query(where("type").is("T").and("itemId").is(callVolId).and("phase").in(WAITBOOKING_PHASES)),
-						Booking.class)
-				.sort(Comparator.comparing(Booking::getPlaceDate).thenComparing(Booking::getOldId));
+				.select(query(where("type").is("T").and("itemId").is(callVolId).and("phase").in(WAITBOOKING_PHASES))
+						.sort(Sort.by("placeDate", "oldId")), Booking.class);
 	}
 
 	public Mono<List<ItemSiteDef>> findAllPickupSites() {
