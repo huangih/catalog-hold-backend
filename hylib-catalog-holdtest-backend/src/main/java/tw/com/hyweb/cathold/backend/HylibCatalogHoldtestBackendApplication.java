@@ -17,14 +17,14 @@ import tw.com.hyweb.cathold.backend.controller.CatHoldManagerService;
 import tw.com.hyweb.cathold.backend.redis.service.VCallVolHoldSummaryService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldClientService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldItemsService;
-import tw.com.hyweb.cathold.backend.redis.service.VTouchControlService;
+import tw.com.hyweb.cathold.backend.redis.service.VParameterService;
 import tw.com.hyweb.cathold.backend.redis.service.VUserCtrlStatusService;
 import tw.com.hyweb.cathold.backend.rule.service.UserCtrlRuleService;
 import tw.com.hyweb.cathold.backend.service.AmqpBackendClient;
 import tw.com.hyweb.cathold.backend.service.BookingViewService;
 import tw.com.hyweb.cathold.backend.service.LendLog2Service;
 import tw.com.hyweb.cathold.backend.service.AmqpStreamService;
-import tw.com.hyweb.cathold.backend.service.TouchClientService;
+import tw.com.hyweb.cathold.backend.service.UserCheckService;
 import tw.com.hyweb.cathold.model.ItemSiteDef;
 
 @SpringBootApplication
@@ -35,11 +35,11 @@ public class HylibCatalogHoldtestBackendApplication {
 		SpringApplication.run(HylibCatalogHoldtestBackendApplication.class, args);
 	}
 
-	@Bean
-	CommandLineRunner test(R2dbcEntityOperations calVolTemplate, VTouchControlService vTouchControlService,
-			MessageConverter messageConverter, BookingViewService bookingViewService,
-			CatHoldManagerService catHoldManagerService, @Qualifier("streamExchange") DirectExchange streamExchange,
-			TouchClientService touchClientService, UserCtrlRuleService userCtrlRuleService,
+//	@Bean
+	CommandLineRunner test(R2dbcEntityOperations calVolTemplate, MessageConverter messageConverter,
+			BookingViewService bookingViewService, UserCheckService userCheckService,
+			VParameterService vParameterService, CatHoldManagerService catHoldManagerService,
+			@Qualifier("streamExchange") DirectExchange streamExchange, UserCtrlRuleService userCtrlRuleService,
 			AmqpBackendClient amqpBackendClient, VHoldClientService vHoldClientService, ObjectMapper om,
 			LendLog2Service lendLog2Service, AmqpStreamService streamBackendService,
 			VUserCtrlStatusService vUserCtrlStatusService, VHoldItemsService vHoldItemsService,
@@ -50,6 +50,7 @@ public class HylibCatalogHoldtestBackendApplication {
 //			touchClientService.touchHoldItem("O027407", "241_Afrif234565TY", 500).subscribe(vhc -> log.info("{}", vhc));
 			calVolTemplate.selectOne(query(where("siteCode").is("A11")), ItemSiteDef.class)
 					.subscribe(site -> log.info("{}", site));
+			userCheckService.checkReaderType(700044, "noFloatLend").subscribe(obj -> log.info("{}", obj));
 			vHoldClientService.getVHoldClientById(259).subscribe(vhc -> log.info("{}", vhc));
 //			TouchControl tc = vHoldClientService.getHoldClientBySessionId("341_eD67au").log()
 //					.flatMap(vhc -> vTouchControlService.newTouchControl("detu", vhc, 500))
@@ -64,10 +65,13 @@ public class HylibCatalogHoldtestBackendApplication {
 					.subscribe(vhis -> log.info("{}", vhis.size()));
 			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(1228210, 47599)
 					.subscribe(cvhs -> log.info("{}", cvhs));
-			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(748992, 2212664)
+			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(1231294, 1577540)
 					.subscribe(cvhs -> log.info("{}", cvhs));
-			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(1228210, 47599)
+			vHoldItemsService.findNonShadowHoldItemByCallVolId(1228211).collectList()
+					.subscribe(vhis -> log.info("{}", vhis.size()));
+			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(1228211, 47599)
 					.subscribe(cvhs -> log.info("{}", cvhs));
+			userCheckService.checkReaderType(2444481, "noFloatLend").subscribe(obj -> log.info("{}", obj));
 		};
 	}
 }

@@ -58,4 +58,24 @@ public class ItemSiteDefService implements HoldClientPropConverter {
 				.map(siteDef -> siteDef.canExpand(availableDate)).defaultIfEmpty(true);
 	}
 
+	public Mono<String> getClyStrBySiteId(int siteId) {
+		return this.calVolTemplate.selectOne(query(where("siteId").is(siteId)), ItemSiteDef.class)
+				.map(siteDef -> siteDef.getClyNum() + "~" + siteDef.getSiteCode() + siteDef.getSiteName())
+				.defaultIfEmpty("");
+	}
+
+	public Mono<String> checkPickupSiteSet(String siteCode, boolean canPickup) {
+		return this.calVolTemplate.selectOne(query(where(SITE_CODE).is(siteCode)), ItemSiteDef.class)
+				.filter(siteDef -> canPickup ^ siteDef.canPickup()).map(siteDef -> {
+					if (canPickup ^ siteDef.isPickupSite())
+						return siteCode + "之可否作為預取書館的設定不符";
+					return "需待" + siteCode + "之設定" + siteDef.getPickupDate() + "後始可執行";
+				});
+	}
+
+	public Mono<String> getCodeById(int siteId) {
+		return this.calVolTemplate.selectOne(query(where("siteId").is(siteId)), ItemSiteDef.class)
+				.map(ItemSiteDef::getSiteCode).defaultIfEmpty("unknown");
+	}
+
 }

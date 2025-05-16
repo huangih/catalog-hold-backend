@@ -6,7 +6,9 @@ import tw.com.hyweb.cathold.model.VHoldItem;
 public interface UserCheckService {
 
 	Mono<VHoldItem> setDependUserRuleStatus(int readerId, VHoldItem vHoldItem);
-	
+
 	Mono<Boolean> checkReaderType(int readerId, String ruleName);
+
+	void correctNoFloatUserLendStatus();
 
 }

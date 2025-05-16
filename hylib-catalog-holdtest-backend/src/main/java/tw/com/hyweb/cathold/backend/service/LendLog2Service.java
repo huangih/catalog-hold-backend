@@ -33,11 +33,12 @@ public class LendLog2Service {
 
 	public void saveLendLog2PreCheck(LendCallback lendCallback) {
 		this.calVolTemplate.selectOne(query(where("id").is(lendCallback.getLogId())), LendLog2.class).subscribe(ll -> {
-			char lastType = lendCallback.getLastType();
-			if (lastType < '@')
-				lastType = LendCallback.compLastType(lastType);
-			ll.setLastType(String.valueOf(lastType));
-			ll.setLendType(String.valueOf(lendCallback.getType()));
+			char lendType = lendCallback.getCanotLendType();
+			if (lendType == 0)
+				lendType = '_';
+			ll.setLendType(String.valueOf(lendType));
+			if (lendCallback.isTimeout())
+				ll.setLastType(String.valueOf(lendType));
 			ll.setCallTypes(lendCallback.getCallbackTypesString());
 			ll.setPreCheck((int) ChronoUnit.MILLIS.between(ll.getBegTime(), LocalDateTime.now()));
 			ll.setUpdateTime(LocalDateTime.now());

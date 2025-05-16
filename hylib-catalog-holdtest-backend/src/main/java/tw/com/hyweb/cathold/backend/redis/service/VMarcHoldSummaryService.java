@@ -38,13 +38,13 @@ public class VMarcHoldSummaryService {
 		String idString = String.format(HOLDSUMMARY_MARCID, marcId);
 		return this.vHoldItemsService.findNonShadowHoldItemByMarcId(marcId).collectList()
 				.zipWith(this.vMarcCallVolumeService.getMarcCallVolumesByMarcId(marcId).collectList())
-				.flatMap(tup2 -> this.redisUtils.redisLockCache(idString,
-						new MarcHoldSummary(marcId, tup2.getT1(), tup2.getT2()), null));
+				.flatMap(tup2 -> this.redisUtils.getMonoFromWriteLock(idString, () -> this.redisUtils
+						.saveForCache(idString, new MarcHoldSummary(marcId, tup2.getT1(), tup2.getT2()), null)));
 	}
 
 	private Mono<Integer> countWaitBookings(List<Integer> callVolIds) {
 		return Flux.fromIterable(callVolIds).flatMap(this.vBookingService::findBookingIdsByItemId).map(List::size)
-				.reduce(0, (n1, n2) -> n1 + n2);
+				.reduce(0, Integer::sum);
 	}
 
 	public void deleteMarcHoldSummary(int marcId) {

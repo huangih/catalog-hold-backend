@@ -1,7 +1,6 @@
 package tw.com.hyweb.cathold.backend.redis.service;
 
 import java.util.List;
-
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Query.query;
 import static org.springframework.data.relational.core.query.Criteria.where;
@@ -28,8 +27,7 @@ public class VSpecReaderidCachService {
 		String ruleName = LENDCHECK_READERTYPES + key;
 		return this.calVolTemplate.selectOne(query(where("readerId").is(readerId)), SpecReaderidCache.class)
 				.map(SpecReaderidCache::getReaderType)
-				.zipWith(this.getTypeIdsByRuleName(ruleName), (type, li) -> li.contains(type))
-				.defaultIfEmpty(false);
+				.zipWith(this.getTypeIdsByRuleName(ruleName), (type, li) -> li.contains(type)).defaultIfEmpty(false);
 	}
 
 	private Mono<List<Integer>> getTypeIdsByRuleName(String ruleName) {

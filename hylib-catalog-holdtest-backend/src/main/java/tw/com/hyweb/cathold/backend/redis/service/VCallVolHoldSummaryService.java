@@ -30,6 +30,8 @@ public class VCallVolHoldSummaryService {
 
 	private final VBookingService vBookingService;
 
+	private final VHoldItemService vHoldItemService;
+
 	private final VHoldItemsService vHoldItemsService;
 
 	private final VMarcCallVolumeService vMarcCallVolumeService;
@@ -50,7 +52,7 @@ public class VCallVolHoldSummaryService {
 		String idString = String.format(CVHS_CALLVOLID, callVolId);
 		return this.vHoldItemsService.findNonShadowHoldItemByCallVolId(callVolId).collectList()
 				.flatMap(vhis -> this.refreshCallVolHoldSummary(callVolId, vhis))
-				.doOnNext(cvhs -> this.redisUtils.redisLockCache(idString, cvhs, null).subscribe());
+				.doOnNext(cvhs -> this.redisUtils.redisLockCache(idString, cvhs, null));
 	}
 
 	private Mono<CallVolHoldSummary> refreshCallVolHoldSummary(int callVolId, @NonNull List<VHoldItem> vhis) {
@@ -96,15 +98,25 @@ public class VCallVolHoldSummaryService {
 		this.redisUtils.unlink(String.format(MARCALLVOL_CALLVOLID, callVolId));
 	}
 
+	public Mono<Boolean> checkRenewableLend(int holdId) {
+		return this.vHoldItemService.getVHoldItemById(holdId).map(VHoldItem::getCallVolId)
+				.flatMap(cvId -> Mono.justOrEmpty(this.sqlserverChargedRepository.findByHoldId(holdId))
+						.map(SqlserverCharged::getReaderId)
+						.flatMap(rId -> this.findCallVolHoldSummaryByCallVolId(cvId, rId)))
+				.flatMap(cvhs -> this.vBookingService.findBookingIdsByItemId(cvhs.getId())
+						.map(li -> cvhs.isRenewableLend(1, li.size())))
+				.defaultIfEmpty(false);
+	}
+
 	public void refrshByHotBookingDate(VHotBookingDate vhbd) {
 		String idString = String.format(CVHS_CALLVOLID, vhbd.getCallVolId());
 		this.redisUtils.getMonoFromRedis(idString, null).map(CallVolHoldSummary.class::cast)
-				.filter(cvh -> cvh.isHotBooking() ^ vhbd.isHotBooking()).flatMap(cvh -> {
+				.filter(cvh -> cvh.isHotBooking() ^ vhbd.isHotBooking()).subscribe(cvh -> {
 					boolean hot = vhbd.isHotBooking();
 					cvh.setHotBooking(hot);
 					cvh.setStatusDate(hot ? vhbd.getStatusDate() : null);
-					return this.redisUtils.redisLockCache(idString, cvh, null);
-				}).subscribe();
+					this.redisUtils.redisLockCache(idString, cvh, null);
+				});
 	}
 
 }

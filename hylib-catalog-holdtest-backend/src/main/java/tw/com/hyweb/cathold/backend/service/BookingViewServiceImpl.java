@@ -3,6 +3,7 @@ package tw.com.hyweb.cathold.backend.service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -29,12 +30,16 @@ import tw.com.hyweb.cathold.model.BookingExpandDuedate;
 import tw.com.hyweb.cathold.model.BookingHistory;
 import tw.com.hyweb.cathold.model.Intransit;
 import tw.com.hyweb.cathold.model.Phase;
+import tw.com.hyweb.cathold.model.UserStopBooking;
+import tw.com.hyweb.cathold.model.UserSuspendBooking;
 import tw.com.hyweb.cathold.model.VHoldItem;
+import tw.com.hyweb.cathold.model.view.BookingHistories;
 import tw.com.hyweb.cathold.model.view.BookingHistoryView;
 import tw.com.hyweb.cathold.model.view.BookingNclView;
 import tw.com.hyweb.cathold.model.view.BookingView;
 import tw.com.hyweb.cathold.model.view.IntransitView;
 import tw.com.hyweb.cathold.model.view.MarcVolume;
+import tw.com.hyweb.cathold.model.view.ReaderBookingSummary;
 
 @RequiredArgsConstructor
 public class BookingViewServiceImpl implements BookingViewService {
@@ -44,6 +49,10 @@ public class BookingViewServiceImpl implements BookingViewService {
 	private static final String USER_ID = "userId";
 
 	private static final String BOOKING_ID = "bookingId";
+
+	private static final String UPDATE_TIME = "updateTime";
+
+	private final BookingExpandDuedateService bookingExpandDuedateService;
 
 	private final VBookingService vBookingService;
 
@@ -57,7 +66,8 @@ public class BookingViewServiceImpl implements BookingViewService {
 
 	private final R2dbcEntityOperations calVolTemplate;
 
-	private Flux<BookingView> getReaderBookingViews(int readerId, int skip, int take, Boolean isAvailation,
+	@Override
+	public Flux<BookingView> getReaderBookingViews(int readerId, int skip, int take, Boolean isAvailation,
 			boolean containCopy) {
 		return this.calVolTemplate.select(query(where(USER_ID).is(readerId)), Booking.class)
 				.filter(bi -> this
@@ -176,10 +186,23 @@ public class BookingViewServiceImpl implements BookingViewService {
 			if (overNotAvail)
 				Stream.of(Phase.OVERDUE_CANCEL, Phase.END_STOP_BOOKING, Phase.OVERDUE_OVER_AVAIL).forEach(phases::add);
 			return this.calVolTemplate.select(query(where(USER_ID).is(readerId).and("phase").in(phases))
-					.sort(Sort.by(Direction.DESC, "updateTime")), BookingHistory.class);
+					.sort(Sort.by(Direction.DESC, UPDATE_TIME)), BookingHistory.class);
 		}
-		return this.calVolTemplate.select(
-				query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, "updateTime")), BookingHistory.class);
+		return this.calVolTemplate.select(query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, UPDATE_TIME)),
+				BookingHistory.class);
+	}
+
+	private Mono<Long> countBookingHistoriesByUserId(int readerId, boolean onlyOverdue, boolean overNotAvail) {
+		List<Phase> phases = new ArrayList<>();
+		if (onlyOverdue) {
+			Stream.of(Phase.OVERDUE_BOOKING, Phase.OVERDUE_BOOKING_WAITING, Phase.ON_STOP_BOOKING).forEach(phases::add);
+			if (overNotAvail)
+				Stream.of(Phase.OVERDUE_CANCEL, Phase.END_STOP_BOOKING, Phase.OVERDUE_OVER_AVAIL).forEach(phases::add);
+			return this.calVolTemplate.count(query(where(USER_ID).is(readerId).and("phase").in(phases)),
+					BookingHistory.class);
+		}
+		return this.calVolTemplate.count(query(where(USER_ID).is(readerId)), BookingHistory.class);
+
 	}
 
 	private Mono<BookingView> convBookingViewPhase(BookingView bookingView, Booking booking) {
@@ -261,6 +284,43 @@ public class BookingViewServiceImpl implements BookingViewService {
 			bnv.setMarcVolume(new MarcVolume(mcv));
 			return bnv;
 		});
+	}
+
+	@Override
+	public Mono<ReaderBookingSummary> getReaderBookingSummary(int readerId) {
+		List<Phase> odPhases = List.of(Phase.OVERDUE_BOOKING, Phase.ON_STOP_BOOKING, Phase.OVERDUE_BOOKING_WAITING);
+		Mono<Integer> biNumMono = this.calVolTemplate.count(query(where(USER_ID).is(readerId)), Booking.class)
+				.map(Long::intValue);
+		Mono<List<BookingView>> abvsMono = this.getBookingViewsByReaderId(readerId, true).collectList();
+		Mono<List<BookingHistoryView>> odbvsMono = this.calVolTemplate
+				.select(query(where(USER_ID).is(readerId).and("phase").in(odPhases)).sort(Sort.by(UPDATE_TIME)),
+						BookingHistory.class)
+				.flatMapSequential(this::convert2BookingView).collectList();
+		Mono<Integer> bedNumMono = this.bookingExpandDuedateService.getExpandDuedatesOnMonthNum(readerId);
+		Mono<UserSuspendBooking> usbMono = this.calVolTemplate
+				.select(query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, "id")),
+						UserSuspendBooking.class)
+				.next();
+		return Mono.zip(biNumMono, abvsMono, odbvsMono, bedNumMono, usbMono).map(tup5 -> new ReaderBookingSummary(tup5))
+				.flatMap(rbs -> {
+					rbs.setUserId(readerId);
+					return this.calVolTemplate.selectOne(query(where(USER_ID).is(readerId).and("available").isTrue()),
+							UserStopBooking.class).map(usb -> {
+								rbs.setStopBegDate(usb.getBegDate());
+								rbs.setStopEndDate(usb.getEndDate());
+								return rbs;
+							}).defaultIfEmpty(rbs);
+				});
+	}
+
+	@Override
+	public Mono<BookingHistories> getReaderBookingHistories(int readerId, Boolean onlyOverdue, Boolean availOver,
+			int skip, int take) {
+		return this.findBookingHistoriesByUserId(readerId, onlyOverdue, availOver).skip(skip).take(take)
+				.flatMap(this::convert2BookingView).collectList()
+				.flatMap(li -> this.countBookingHistoriesByUserId(readerId, onlyOverdue, availOver).map(Long::intValue)
+						.map(n -> new BookingHistories(n, li)))
+				.defaultIfEmpty(new BookingHistories(0, Collections.emptyList()));
 	}
 
 }

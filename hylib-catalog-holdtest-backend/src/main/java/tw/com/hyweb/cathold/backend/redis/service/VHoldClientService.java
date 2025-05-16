@@ -2,6 +2,7 @@ package tw.com.hyweb.cathold.backend.redis.service;
 
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,11 +51,10 @@ public class VHoldClientService {
 
 	public Mono<VHoldClient> getVHoldClientById(int holdClientId) {
 		String idString = String.format(HOLDCLIENT_PREFIX, holdClientId);
-		return this.redisUtils.getMonoFromRedis(idString, null).map(VHoldClient.class::cast)
-				.switchIfEmpty(this.redisUtils.redisMonoSupplierCache(idString,
-						() -> this.calVolTemplate.selectOne(query(where("id").is(holdClientId)), HoldClient.class)
-								.flatMap(this::convertHoldClient),
-						null));
+		return this.redisUtils.getMonoFromRedis(idString, Duration.ofMinutes(30)).map(VHoldClient.class::cast)
+				.switchIfEmpty(this.calVolTemplate.selectOne(query(where("id").is(holdClientId)), HoldClient.class)
+						.flatMap(this::convertHoldClient)
+						.doOnNext(vhc -> this.redisUtils.redisLockCache(idString, vhc, Duration.ofMinutes(30))));
 	}
 
 	private Mono<VHoldClient> convertHoldClient(@NonNull HoldClient holdClient) {
@@ -124,7 +124,7 @@ public class VHoldClientService {
 	}
 
 	private int getDelimitIndex(String s) {
-		if (s.length() == 0)
+		if (s.isEmpty())
 			return -1;
 		int inx1 = s.indexOf('|');
 		int inx2 = s.indexOf('^');
@@ -145,13 +145,13 @@ public class VHoldClientService {
 		return Mono.just(new HashMap<>());
 	}
 
-	public Mono<List<HoldClient>> getHoldClientsBySiteCode(String siteCode) {
+	public Flux<HoldClient> getHoldClientsBySiteCode(String siteCode) {
 		return this.calVolTemplate.select(query(where(SITE_CODE).is(siteCode)), HoldClient.class)
 				.filter(hc -> !hc.getName().endsWith("-SIP2"))
 				.flatMap(hc -> this.getSeqNumById(hc.getId()).map(ClientSequence::getSeqNum).map(seqNum -> {
 					hc.setCurrentSeq(seqNum);
 					return hc;
-				})).collectList();
+				}));
 	}
 
 	private Mono<ClientSequence> getSeqNumById(int holdClientId) {
@@ -161,7 +161,7 @@ public class VHoldClientService {
 						.flatMap(this.calVolTemplate::insert));
 	}
 
-	public Mono<VHoldClient> getHoldClientBySessionId(String sessionId) {
+	public Mono<VHoldClient> getVHoldClientBySessionId(String sessionId) {
 		return Mono.justOrEmpty(sessionId.split("_")[0]).map(Integer::parseInt).flatMap(this::getVHoldClientById);
 	}
 
@@ -188,17 +188,19 @@ public class VHoldClientService {
 			this.copyProperty("noticeLocations", nhc, hc);
 			this.copyProperty("transitDouble", nhc, hc);
 			this.copyProperty("toFloatLoc", nhc, hc);
-			return this.setHoldClientSeqNum(nhc.getId(), seqNum).map(ClientSequence::getSeqNum).flatMap(sn -> {
-				hc.setCurrentSeq(sn);
-				return this.calVolTemplate.update(hc);
-			});
-		}).doOnNext(this::redisVHoldClient);
+			if (seqNum != null && seqNum >= 0)
+				return this.setHoldClientSeqNum(nhc.getId(), seqNum).map(ClientSequence::getSeqNum).map(sn -> {
+					hc.setCurrentSeq(sn);
+					return hc;
+				});
+			return Mono.just(hc);
+		}).flatMap(this.calVolTemplate::update).doOnNext(this::redisVHoldClient);
 	}
 
 	private void redisVHoldClient(HoldClient holdClient) {
 		String idString = String.format(HOLDCLIENT_PREFIX, holdClient.getId());
-		this.convertHoldClient(holdClient).flatMap(vhc -> this.redisUtils.redisLockCache(idString, vhc, null))
-				.subscribe();
+		this.convertHoldClient(holdClient)
+				.subscribe(vhc -> this.redisUtils.redisLockCache(idString, vhc, Duration.ofMinutes(30)));
 	}
 
 	private void copyProperty(@NonNull String property, @NonNull HoldClient source, @NonNull HoldClient target) {
@@ -226,10 +228,6 @@ public class VHoldClientService {
 			cs.setSeqNum(sn);
 			return cs;
 		}).flatMap(this.calVolTemplate::update));
-	}
-
-	public Mono<String[]> getTouchCallbackById(String paramId) {
-		return this.redisUtils.getBuketFromRedis(paramId, false, null).cast(String.class).map(s -> s.split("\\|"));
 	}
 
 }

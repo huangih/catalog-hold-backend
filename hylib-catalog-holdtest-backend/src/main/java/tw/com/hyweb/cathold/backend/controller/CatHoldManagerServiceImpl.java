@@ -1,5 +1,6 @@
 package tw.com.hyweb.cathold.backend.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -13,6 +14,8 @@ import reactor.core.scheduler.Schedulers;
 import tw.com.hyweb.cathold.backend.redis.service.ReactiveRedisUtils;
 import tw.com.hyweb.cathold.backend.service.AmqpBackendClient;
 import tw.com.hyweb.cathold.backend.service.BookingViewService;
+import tw.com.hyweb.cathold.backend.service.ClyTransitService;
+import tw.com.hyweb.cathold.backend.service.ItemSiteDefService;
 import tw.com.hyweb.cathold.backend.service.AmqpStreamService;
 import tw.com.hyweb.cathold.model.Booking;
 import tw.com.hyweb.cathold.model.view.BookingNclView;
@@ -24,6 +27,10 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 
 	private final BookingViewService bookingViewService;
 
+	private final ClyTransitService clyTransitService;
+
+	private final ItemSiteDefService itemSiteDefService;
+
 	private final AmqpStreamService amqpStreamService;
 
 	private final AmqpBackendClient amqpBackendClient;
@@ -33,7 +40,7 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 	@Override
 	public Mono<ServerResponse> refreshAllRuleStatuses(ServerRequest request) {
 		return ServerResponse.ok().contentType(MediaType.TEXT_HTML)
-				.body(this.amqpBackendClient.rerefreshAllRuleStatuses(), BookingNclView.class)
+				.body(this.amqpBackendClient.refreshAllRuleStatuses(), BookingNclView.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -57,7 +64,12 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 								.publishOn(Schedulers.immediate(), 1).filter(Booking.class::isInstance)
 								.cast(Booking.class).flatMap(bookingViewService::convert2BookingView)
 								.doOnComplete(() -> this.amqpStreamService.deleteStream(qName))));
-		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingView.class)
+		return argMono0.flatMap(siteCode -> this.itemSiteDefService.checkPickupSiteSet(siteCode, false))
+				.doOnNext(s -> log.info("bookingPickupSiteClose:{}", s))
+				.flatMap(s -> ServerResponse.ok().contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
+						.body(Mono.just(s), String.class))
+				.switchIfEmpty(
+						ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingView.class))
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -71,7 +83,11 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 								.publishOn(Schedulers.immediate(), 1).filter(Booking.class::isInstance)
 								.cast(Booking.class).flatMap(bookingViewService::convert2BookingView)
 								.doOnComplete(() -> this.amqpStreamService.deleteStream(qName))));
-		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingView.class)
+		return argMono0.flatMap(siteCode -> this.itemSiteDefService.checkPickupSiteSet(siteCode, true))
+				.flatMap(s -> ServerResponse.ok().contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
+						.body(Mono.just(s), String.class))
+				.switchIfEmpty(
+						ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingView.class))
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -100,6 +116,14 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 	}
 
 	@Override
+	public Mono<ServerResponse> getClySiteDest(ServerRequest request) {
+		return ServerResponse.ok().contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
+				.body(Mono.justOrEmpty(request.queryParam("barcode"))
+						.flatMap(this.clyTransitService::getClyTransitSiteDest), String.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
+	}
+
+	@Override
 	public Mono<ServerResponse> getBookingViewForNcl(ServerRequest request) {
 		Mono<LocalDate> argMono0 = Mono.justOrEmpty(request.queryParam("begDate")).map(LocalDate::parse);
 		Mono<LocalDate> argMono1 = Mono.justOrEmpty(request.queryParam("endDate")).map(LocalDate::parse);
@@ -110,6 +134,23 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 								.cast(Booking.class).flatMap(bookingViewService::convert2BookingNclView)
 								.doOnComplete(() -> this.amqpStreamService.deleteStream(qName))));
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingNclView.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
+	}
+
+	@Override
+	public Mono<ServerResponse> aduItemCtrlRules(ServerRequest request) {
+		Mono<Boolean> argMono0 = Mono.justOrEmpty(request.queryParam("aduRules")).map(Boolean::parseBoolean);
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
+				.body(argMono0.flatMap(this.amqpBackendClient::aduItemCtrlRules), String.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
+	}
+
+	@Override
+	public Mono<ServerResponse> refreshHoldFromHylib(ServerRequest request) {
+		Flux<String> argFlux = Mono.justOrEmpty(request.queryParam("barcode"))
+				.flatMapMany(s -> Flux.fromArray(s.split(","))).map(String::trim);
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
+				.body(argFlux.flatMap(this.amqpBackendClient::refreshHoldFromHylib), String.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 

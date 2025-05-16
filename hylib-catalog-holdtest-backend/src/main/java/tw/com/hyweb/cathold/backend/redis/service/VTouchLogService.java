@@ -3,9 +3,6 @@ package tw.com.hyweb.cathold.backend.redis.service;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.Set;
-
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
@@ -17,7 +14,6 @@ import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.backend.service.ItemStatusDefService;
 import tw.com.hyweb.cathold.model.HoldClient;
 import tw.com.hyweb.cathold.model.TouchLog;
-import tw.com.hyweb.cathold.model.client.TouchControl;
 import tw.com.hyweb.cathold.model.client.TouchResult;
 
 @Service
@@ -42,21 +38,12 @@ public class VTouchLogService {
 		return this.calVolTemplate.insert(new TouchLog(barcode, clientId));
 	}
 
-	public void updatePreTime(TouchControl touchControl) {
-		String tcId = touchControl.getTouchControlId();
-		int touchLogId = Integer.parseInt(tcId.split("\\|")[0]);
-		Set<Integer> keys = touchControl.getPreMap().keySet();
-		this.redisUtils.getMonoFromLock(TOUCHLOG_UPDATE_LOCK + touchLogId,
-				() -> this.calVolTemplate.selectOne(query(where("id").is(touchLogId)), TouchLog.class).flatMap(tl -> {
-					tl.setStatus(touchControl.getPreMap().get(-1));
-					if (!keys.isEmpty())
-						tl.setNumber(Collections.max(keys));
-					LocalDateTime beg = tl.getCreateTime();
-					long millions = beg.until(LocalDateTime.now(), ChronoUnit.MILLIS);
-					tl.setPreMillions(millions);
-					tl.setPreLast(touchControl.getLastCallback());
-					return this.calVolTemplate.update(tl);
-				})).subscribe();
+	public void updatePreTime(TouchLog touchLog, int type) {
+		String key = TOUCHLOG_UPDATE_LOCK + touchLog.getId();
+		touchLog.setNumber(type);
+		LocalDateTime beg = touchLog.getCreateTime();
+		touchLog.setPreMillions(beg.until(LocalDateTime.now(), ChronoUnit.MILLIS));
+		this.redisUtils.getMonoFromLock(key, () -> this.calVolTemplate.update(touchLog)).subscribe();
 	}
 
 	public void updateResultTime(final TouchResult touchResult, int touchLogId) {
@@ -97,4 +84,5 @@ public class VTouchLogService {
 				}).switchIfEmpty(this.vParameterService.getNumberFromRuleName(ROLLBACK_BEFORE_MINUTES)
 						.map(minusBefore -> "找不到前" + minusBefore + "分鐘內跳號點收紀錄").map(s -> new TouchResult('E', "", s)));
 	}
+
 }

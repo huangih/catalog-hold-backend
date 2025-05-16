@@ -1,7 +1,6 @@
 package tw.com.hyweb.cathold.backend.service;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -10,14 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.backend.redis.service.VCallVolHoldSummaryService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldClientService;
-import tw.com.hyweb.cathold.backend.redis.service.VLendCallBackService;
 import tw.com.hyweb.cathold.backend.redis.service.VMarcHoldSummaryService;
-import tw.com.hyweb.cathold.backend.redis.service.VTouchControlService;
 import tw.com.hyweb.cathold.model.HoldClient;
-import tw.com.hyweb.cathold.model.LendCallback;
 import tw.com.hyweb.cathold.model.LendCheck;
 import tw.com.hyweb.cathold.model.VHotBookingDate;
-import tw.com.hyweb.cathold.model.client.PreTouchResult;
 import tw.com.hyweb.cathold.model.client.TouchResult;
 import tw.com.hyweb.cathold.model.client.VHoldClient;
 import tw.com.hyweb.cathold.model.view.CallVolHoldSummary;
@@ -32,13 +27,7 @@ public class AmqpBackendService {
 
 	private final BookingResultViewService bookingResultViewService;
 
-	private final LendLog2Service lendLog2Service;
-
-	private final TouchClientService touchClientService;
-
-	private final VTouchControlService vTouchControlService;
-
-	private final VLendCallBackService vLendCallBackService;
+	private final TouchService touchService;
 
 	private final VHoldClientService vHoldClientService;
 
@@ -47,13 +36,6 @@ public class AmqpBackendService {
 	private final VCallVolHoldSummaryService vCallVolHoldSummaryService;
 
 	private final AmqpBackendClient amqpBackendClient;
-
-	public Mono<Void> preTouchCallback(Object[] args) {
-		String touchId = (String) args[0];
-		PreTouchResult preTouchResult = (PreTouchResult) args[1];
-		log.info("preTouchCallback-{}: {}", touchId, preTouchResult);
-		return this.vTouchControlService.preTouchCallback(touchId, preTouchResult);
-	}
 
 	public Mono<VHoldClient> getVHoldClientById(int holdClientId) {
 		return this.vHoldClientService.getVHoldClientById(holdClientId);
@@ -79,31 +61,10 @@ public class AmqpBackendService {
 		int holdId = (int) args[1];
 		int muserId = (int) args[2];
 		String barcode = (String) args[3];
-		return this.lendLog2Service.newLendLog(readerId, holdId, muserId, LocalDateTime.now()).map(LendCallback::new)
-				.flatMap(lc -> {
-					Mono<Boolean> m0 = this.lendCheckService.checkRfidUidMap(lc, barcode)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m1 = this.lendCheckService.lastItemMissing(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m2 = this.lendCheckService.onAvailBooking(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m3 = this.lendCheckService.onTransit(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m4 = this.lendCheckService.onBookingAvailRemove(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m5 = this.lendCheckService.onUserBooking(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m6 = this.lendCheckService.onBookingDistribution(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					Mono<Boolean> m7 = this.lendCheckService.onCMissingLend(lc)
-							.flatMap(lck -> this.vLendCallBackService.lendCheck(lc, lck));
-					return Mono.zip(m0, m1, m2, m3, m4, m5, m6, m7)
-							.flatMap(tuple8 -> this.vLendCallBackService.prepareLendCallback(lc));
-				});
+		return this.lendCheckService.readerCanLendHold(readerId, holdId, muserId, barcode);
 	}
 
 	public Mono<Void> lendCallback(String callbackId) {
-		log.info("lendCallback: {}", callbackId);
 		this.lendCheckService.lendCallback(callbackId);
 		return Mono.empty();
 	}
@@ -120,7 +81,7 @@ public class AmqpBackendService {
 
 	public Mono<CallVolHoldSummary> findCallVolHoldSummaryByCallVolId(Integer[] args) {
 		return this.vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(args[0], args[1])
-				.timeout(Duration.ofSeconds(10), Mono.just(new CallVolHoldSummary())
+				.timeout(Duration.ofSeconds(20), Mono.just(new CallVolHoldSummary())
 						.doOnNext(li -> log.warn("findCallVolHoldSummaryByCallVolId: {}-{}", args[0], args[1])));
 	}
 
@@ -135,14 +96,14 @@ public class AmqpBackendService {
 	}
 
 	public Mono<List<HoldClient>> getHoldClientsBySiteCode(String siteCode) {
-		return this.vHoldClientService.getHoldClientsBySiteCode(siteCode);
+		return this.vHoldClientService.getHoldClientsBySiteCode(siteCode).collectList();
 	}
 
 	public Mono<TouchResult> touchHoldItem(Object... args) {
 		String barcode = (String) args[0];
 		String sessionId = (String) args[1];
 		int muserId = (int) args[2];
-		return this.touchClientService.touchHoldItem(barcode, sessionId, muserId);
+		return this.touchService.touchHoldItem(barcode, sessionId, muserId);
 	}
 
 }

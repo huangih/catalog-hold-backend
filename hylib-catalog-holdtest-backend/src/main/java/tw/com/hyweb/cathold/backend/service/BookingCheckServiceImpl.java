@@ -3,6 +3,9 @@ package tw.com.hyweb.cathold.backend.service;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import static org.springframework.data.relational.core.query.Query.query;
+
+import java.util.List;
+
 import static org.springframework.data.relational.core.query.Criteria.where;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -11,7 +14,6 @@ import tw.com.hyweb.cathold.model.Booking;
 import tw.com.hyweb.cathold.model.BookingDistribution;
 import tw.com.hyweb.cathold.model.Phase;
 import tw.com.hyweb.cathold.model.VBookingAvailRemove;
-import tw.com.hyweb.cathold.model.VBookingAvailation;
 import tw.com.hyweb.cathold.model.VBookingAvailationHistory;
 import tw.com.hyweb.cathold.model.VIntransitBooking;
 
@@ -24,8 +26,10 @@ public class BookingCheckServiceImpl implements BookingCheckService {
 
 	@Override
 	public Mono<Integer> onAvailBooking(int holdId) {
-		return this.calVolTemplate.selectOne(query(where(HOLD_ID).is(holdId)), VBookingAvailation.class)
-				.map(VBookingAvailation::getUserId);
+		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE, Phase.WAIT_ANNEX);
+		return this.calVolTemplate
+				.selectOne(query(where("associateId").is(holdId).and("phase").in(availPhases)), Booking.class)
+				.map(Booking::getUserId);
 	}
 
 	@Override

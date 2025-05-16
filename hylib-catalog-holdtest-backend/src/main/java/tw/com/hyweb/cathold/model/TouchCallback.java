@@ -9,10 +9,16 @@ import lombok.NoArgsConstructor;
 @Data
 public class TouchCallback {
 
+	private int type;
+
 	private String funcName;
 
 	private String routeKey;
 
 	private Object[] args;
+
+	public TouchCallback(int type) {
+		this.type = type;
+	}
 
 }

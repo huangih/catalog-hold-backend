@@ -28,9 +28,13 @@ import tw.com.hyweb.cathold.model.AppendixStatusReadConverter;
 import tw.com.hyweb.cathold.model.AppendixStatusWriteConverter;
 import tw.com.hyweb.cathold.model.PhaseReadConverter;
 import tw.com.hyweb.cathold.model.PhaseWriteConverter;
+import tw.com.hyweb.cathold.model.ResultPhaseReadConverter;
+import tw.com.hyweb.cathold.model.ResultPhaseWriteConverter;
 import tw.com.hyweb.cathold.model.RulePickupReadConverter;
 import tw.com.hyweb.cathold.model.RuleStatusReadConverter;
 import tw.com.hyweb.cathold.model.RuleStatusWriteConverter;
+import tw.com.hyweb.cathold.model.SuspendPhaseReadConverter;
+import tw.com.hyweb.cathold.model.SuspendPhaseWriteConverter;
 
 @Configuration
 public class MariadbR2dbcDataSourceConfiguration {
@@ -52,8 +56,10 @@ public class MariadbR2dbcDataSourceConfiguration {
 	@Primary
 	R2dbcEntityOperations calVolR2dbcEntityTemplate() {
 		List<Converter<?, ?>> converters = Arrays.asList(new AppendixStatusReadConverter(),
-				new AppendixStatusWriteConverter(), new RulePickupReadConverter(), new RuleStatusReadConverter(),
-				new RuleStatusWriteConverter(), new PhaseReadConverter(), new PhaseWriteConverter());
+				new AppendixStatusWriteConverter(), new PhaseReadConverter(), new PhaseWriteConverter(),
+				new ResultPhaseReadConverter(), new ResultPhaseWriteConverter(), new RulePickupReadConverter(),
+				new RuleStatusReadConverter(), new RuleStatusWriteConverter(), new SuspendPhaseReadConverter(),
+				new SuspendPhaseWriteConverter());
 		R2dbcCustomConversions r2dbcCustomConversions = R2dbcCustomConversions.of(MySqlDialect.INSTANCE, converters);
 		R2dbcMappingContext context = new R2dbcMappingContext(DefaultNamingStrategy.INSTANCE);
 		R2dbcConverter r2dbcConverter = new MappingR2dbcConverter(context, r2dbcCustomConversions);

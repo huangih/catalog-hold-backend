@@ -22,40 +22,36 @@ public class VHoldItemService {
 
 	public Mono<VHoldItem> getVHoldItemById(int holdId) {
 		String idString = String.format(VHOLDITEM_HOLDID, holdId);
-		return this.redisUtils.getMonoFromRedis(idString, null).cast(VHoldItem.class)
-				.switchIfEmpty(this.redisUtils.getMonoFromDatabase(idString, () -> this.calVolTemplate
-						.selectOne(query(where("holdId").is(holdId)), VHoldItem.class)
-						.doOnNext(vh -> this.redisUtils
-								.redisLockCache(String.format(BARCODE_HOLDID, vh.getBarcode()), vh.getHoldId(), null)
-								.subscribe()),
-						null));
+		return this.redisUtils.getMonoFromRedis(idString, null).cast(VHoldItem.class).switchIfEmpty(this.calVolTemplate
+				.selectOne(query(where("holdId").is(holdId)), VHoldItem.class).doOnNext(this::redisCache));
 	}
 
 	public void redisCache(VHoldItem vh) {
-		this.redisUtils.redisLockCache(String.format(VHOLDITEM_HOLDID, vh.getHoldId()), vh, null).subscribe();
-		this.redisUtils.redisLockCache(String.format(BARCODE_HOLDID, vh.getBarcode()), vh.getHoldId(), null)
-				.subscribe();
+		this.redisUtils.redisLockCache(String.format(VHOLDITEM_HOLDID, vh.getHoldId()), vh, null);
+		this.redisUtils.redisLockCache(String.format(BARCODE_HOLDID, vh.getBarcode()), vh.getHoldId(), null);
 	}
 
 	public Mono<VHoldItem> getVHoldItemByBarcode(String barcode) {
 		String idString = String.format(BARCODE_HOLDID, barcode);
-		return this.redisUtils
-				.getMonoFromRedis(idString, null).cast(Integer.class).switchIfEmpty(this.redisUtils
-						.getMonoFromDatabase(idString, () -> this.getHoldIdByBarcodeFromDb(barcode), null))
-				.flatMap(this::getVHoldItemById);
+		return this.redisUtils.getMonoFromRedis(idString, null).cast(Integer.class)
+				.switchIfEmpty(this.getHoldIdByBarcode(barcode)).flatMap(this::getVHoldItemById);
+	}
+
+	private Mono<Integer> getHoldIdByBarcode(String barcode) {
+		String idString = String.format(BARCODE_HOLDID, barcode);
+		return this.redisUtils.getMonoFromRedis(idString, null).cast(Integer.class)
+				.switchIfEmpty(this.getHoldIdByBarcodeFromDb(barcode));
 	}
 
 	private Mono<Integer> getHoldIdByBarcodeFromDb(String barcode) {
 		return this.calVolTemplate.selectOne(query(where("barcode").is(barcode)), VHoldItem.class)
-				.doOnNext(vh -> this.redisUtils
-						.redisLockCache(String.format(VHOLDITEM_HOLDID, vh.getHoldId()), vh, null).subscribe())
-				.map(VHoldItem::getHoldId);
+				.doOnNext(this::redisCache).map(VHoldItem::getHoldId);
 	}
 
-	public Mono<Integer> getHoldIdByBarcode(String barcode) {
-		String idString = String.format(BARCODE_HOLDID, barcode);
-		return this.redisUtils.getMonoFromRedis(idString, null).cast(Integer.class).switchIfEmpty(
-				this.redisUtils.getMonoFromDatabase(idString, () -> this.getHoldIdByBarcodeFromDb(barcode), null));
-	}
-
+//	public Mono<Integer> getHoldIdByBarcode(String barcode) {
+//		String idString = String.format(BARCODE_HOLDID, barcode);
+//		return this.redisUtils.getMonoFromRedis(idString, null).cast(Integer.class).switchIfEmpty(
+//				this.redisUtils.getMonoFromDatabase(idString, () -> this.getHoldIdByBarcodeFromDb(barcode), null));
+//	}
+//
 }

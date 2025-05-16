@@ -44,10 +44,10 @@ public class LendCheck implements Serializable {
 	public LendCheck(String callbackId, LendCallback lendCallback) {
 		if (callbackId != null)
 			this.callbackId = callbackId;
-		this.canLend = lendCallback.getCanotLendIndex() == Integer.MAX_VALUE;
+		this.canLend = lendCallback.getCanotLendType() == 0;
 		if (!this.canLend) {
 			this.reason = lendCallback.getReason();
-			this.type = lendCallback.getType();
+			this.type = lendCallback.getCanotLendType();
 		}
 	}
 

@@ -42,4 +42,5 @@ public class VHoldClient {
 		this.transitDouble = holdClient.isTransitDouble();
 		this.toFloatLoc = holdClient.isToFloatLoc();
 	}
+	
 }

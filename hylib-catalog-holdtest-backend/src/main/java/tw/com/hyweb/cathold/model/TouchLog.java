@@ -27,8 +27,6 @@ public class TouchLog implements Serializable {
 
 	private long preMillions;
 
-	private int preLast;
-
 	private int number;
 
 	private long millions;

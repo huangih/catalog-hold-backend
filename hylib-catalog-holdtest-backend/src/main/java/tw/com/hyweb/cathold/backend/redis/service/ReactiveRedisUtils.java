@@ -4,11 +4,12 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.redisson.api.RBucketReactive;
@@ -19,9 +20,13 @@ import org.redisson.api.RLockReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.KeysScanOptions;
 import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple3;
+import reactor.util.function.Tuples;
 
 @Component
 @RequiredArgsConstructor
@@ -31,10 +36,24 @@ public class ReactiveRedisUtils {
 
 	private final RedissonReactiveClient client;
 
+	private Consumer<Tuple3<String, List<?>, Duration>> listCacheConsumer;
+
+	private Consumer<Tuple3<String, Object, Duration>> monoCacheConsumer;
+
+	@PostConstruct
+	void init() {
+		Flux.create(sink -> this.listCacheConsumer = sink::next).cast(Tuple3.class).delayElements(Duration.ofMillis(10))
+				.subscribe(tup3 -> this.redisListCacheProcess(String.class.cast(tup3.getT1()), (List<?>) tup3.getT2(),
+						Duration.class.cast(tup3.getT3())));
+		Flux.create(sink -> this.monoCacheConsumer = sink::next).cast(Tuple3.class).delayElements(Duration.ofMillis(10))
+				.subscribe(tup3 -> this.redisLockCacheProcess(String.class.cast(tup3.getT1()), tup3.getT2(),
+						Duration.class.cast(tup3.getT3())));
+	}
+
 	public Mono<Boolean> hasKey(String key) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).readLock();
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b).flatMap(b -> this.client.getKeys()
-				.countExists(key).map(n -> n > 0).doFinally(s -> rLock.forceUnlock().subscribe()));
+		return rLock.tryLock(10, 5, TimeUnit.SECONDS).filter(b -> b).flatMap(b -> this.client.getKeys().countExists(key)
+				.map(n -> n > 0).doFinally(s -> rLock.forceUnlock().subscribe()));
 	}
 
 	public <T> Mono<T> getBuketFromRedis(String key, Boolean reExpire, Duration duration) {
@@ -54,19 +73,6 @@ public class ReactiveRedisUtils {
 						.doFinally(s -> rLock.forceUnlock().subscribe()));
 	}
 
-	public <T> Mono<T> getMonoFromDatabase(String key, Supplier<Mono<T>> supplier, Duration duration) {
-		return this.getMonoFromDatabase(key, supplier, duration, null);
-	}
-
-	public <T> Mono<T> getMonoFromDatabase(String key, Supplier<Mono<T>> supplier, Duration duration, Instant instant) {
-		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
-		RBucketReactive<T> rObj = this.client.getBucket(key);
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> rObj.isExists().filter(b1 -> b1).flatMap(b1 -> this.getMonoReExipe(rObj, null, duration))
-						.switchIfEmpty(supplier.get().flatMap(obj -> this.saveForCache(key, obj, duration, instant)))
-						.doFinally(s -> rLock.forceUnlock().subscribe()));
-	}
-
 	private <T> Mono<T> getMonoReExipe(RBucketReactive<T> buket, Boolean reExpire, Duration duration) {
 		if (duration == null)
 			duration = Duration.ofDays(1);
@@ -75,33 +81,46 @@ public class ReactiveRedisUtils {
 		return buket.getAndExpire(duration);
 	}
 
-	public <T> Mono<T> redisMonoSupplierCache(String key, Supplier<Mono<T>> supplier, Duration duration) {
+	public <T> Mono<T> redisMonoCache(String key, Mono<T> objectMono, Duration duration) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
 		RBucketReactive<T> rObj = this.client.getBucket(key);
 		if (duration == null)
 			duration = Duration.ofDays(1);
 		final Duration fDuration = duration;
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> supplier.get().flatMap(obj -> rObj.set(obj, fDuration).thenReturn(obj))
-						.doFinally(s -> rLock.forceUnlock().subscribe()));
+		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b).flatMap(b -> objectMono.map(obj -> {
+			rObj.set(obj, fDuration);
+			return obj;
+		}).doFinally(s -> rLock.forceUnlock().subscribe()));
 	}
 
-	public <T> Mono<T> redisLockCache(String key, T object, Duration duration) {
+	public void redisLockCache(String key, Object object, Object duration) {
+		Tuple3<String, Object, Duration> tup3 = Tuples.of(key, object, this.getAssingTimeDuration(duration));
+		this.monoCacheConsumer.accept(tup3);
+	}
+
+	private Duration getAssingTimeDuration(Object object) {
+		if (object == null)
+			return Duration.ofDays(1);
+		if (object instanceof LocalDate)
+			return Duration.ofMinutes(
+					ChronoUnit.MINUTES.between(LocalDateTime.now(), LocalDate.now().plusDays(1).atStartOfDay()) + 2);
+		if (object instanceof LocalDateTime dateTime)
+			return Duration.ofMinutes(ChronoUnit.MINUTES.between(LocalDateTime.now(), dateTime));
+		return Duration.class.cast(object);
+	}
+
+	private <T> void redisLockCacheProcess(String key, T object, Duration duration) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
 		RBucketReactive<T> rObj = this.client.getBucket(key);
-		if (duration == null)
-			duration = Duration.ofDays(1);
-		final Duration fDuration = duration;
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> rObj.set(object, fDuration).thenReturn(object))
-				.doFinally(s -> rLock.forceUnlock().subscribe());
+		rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b).flatMap(b -> rObj.set(object, duration))
+				.doFinally(s -> rLock.forceUnlock().subscribe()).subscribe();
 	}
 
-	private <T> Mono<T> saveForCache(String key, T obj, Duration duration, Instant instant) {
+	public <T> Mono<T> saveForCache(String key, T obj, Duration duration) {
+		if (duration == null)
+			duration = Duration.ofDays(1);
 		RBucketReactive<T> buket = this.client.getBucket(key);
-		if (instant == null)
-			return buket.set(obj, duration != null ? duration : Duration.ofDays(1)).thenReturn(obj);
-		return buket.set(obj).thenReturn(obj).doOnNext(o -> buket.expire(instant).subscribe());
+		return buket.set(obj, duration).thenReturn(obj);
 	}
 
 	public <T> Mono<List<T>> getMonoListFromRedis(String key, Class<T> clazz, boolean reExpire, Duration duration) {
@@ -111,24 +130,6 @@ public class ReactiveRedisUtils {
 				.flatMap(b -> rObj.isExists().filter(b1 -> b1)
 						.flatMap(b1 -> this.getMonoListReexpire(rObj, clazz, reExpire, duration))
 						.doFinally(s -> rLock.forceUnlock().subscribe()));
-	}
-
-	public <T> Mono<List<T>> getMonoListFromDatabase(String key, Class<T> clazz, boolean reExpire,
-			Supplier<Mono<List<T>>> supplier, Duration duration) {
-		return this.getMonoListFromDatabase(key, clazz, reExpire, supplier, duration, null);
-	}
-
-	public <T> Mono<List<T>> getMonoListFromDatabase(String key, Class<T> clazz, boolean reExpire,
-			Supplier<Mono<List<T>>> supplier, Duration duration, Instant instant) {
-		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
-		RBucketReactive<List<T>> rObj = this.client.getBucket(key);
-		return rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> rObj.isExists().filter(b1 -> b1)
-						.flatMap(b1 -> this.getMonoListReexpire(rObj, clazz, reExpire, duration))
-						.switchIfEmpty(supplier.get().defaultIfEmpty(Collections.emptyList())
-								.flatMap(li -> this.saveForCache(key, new ArrayList<>(li), duration, instant)))
-						.doFinally(s -> rLock.forceUnlock().subscribe()))
-				.defaultIfEmpty(Collections.emptyList());
 	}
 
 	private <T> Mono<List<T>> getMonoListReexpire(RBucketReactive<List<T>> buket, Class<T> clazz, boolean reExpire,
@@ -148,13 +149,16 @@ public class ReactiveRedisUtils {
 						.doFinally(s -> rLock.forceUnlock().subscribe()));
 	}
 
-	public <T> void redisListCache(String key, List<T> list, Duration duration) {
+	public void redisListCache(String key, List<?> list, Object duration) {
+		Tuple3<String, List<?>, Duration> tup3 = Tuples.of(key, list, this.getAssingTimeDuration(duration));
+		this.listCacheConsumer.accept(tup3);
+	}
+
+	private <T> void redisListCacheProcess(String key, List<T> list, Duration duration) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
 		RListReactive<T> rList = this.client.getList(key);
 		rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> rList.delete()
-						.flatMap(n -> rList.addAll(list)
-								.flatMap(b1 -> rList.expire(duration == null ? Duration.ofDays(1) : duration)))
+				.flatMap(b -> rList.delete().flatMap(n -> rList.addAll(list).flatMap(b1 -> rList.expire(duration)))
 						.doFinally(s -> rLock.forceUnlock().subscribe()))
 				.subscribe();
 	}
@@ -183,7 +187,7 @@ public class ReactiveRedisUtils {
 
 	public <R> Mono<R> getMonoFromWriteLock(String key, Supplier<Mono<R>> supplier) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
-		return rLock.tryLock(2000, TimeUnit.MILLISECONDS).filter(b -> b)
+		return rLock.tryLock(3000, 5000, TimeUnit.MILLISECONDS).filter(b -> b)
 				.flatMap(b -> supplier.get().doFinally(obj -> rLock.forceUnlock().subscribe()))
 				.switchIfEmpty(Mono.empty());
 	}
@@ -206,14 +210,16 @@ public class ReactiveRedisUtils {
 
 	public void unlink(String key) {
 		RLockReactive rLock = this.client.getReadWriteLock(key + RWLOCK).writeLock();
-		rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).filter(b -> b)
-				.flatMap(b -> this.client.getKeys().unlink(key).doFinally(s -> rLock.forceUnlock().subscribe()))
-				.subscribe();
+		rLock.tryLock(2000, 1500, TimeUnit.MILLISECONDS).handle((b, sink) -> {
+			if (Boolean.TRUE.equals(b))
+				this.client.getKeys().unlink(key).doFinally(s -> rLock.unlock().subscribe());
+			sink.complete();
+		}).subscribe();
 	}
 
-	public void unlinkKeys(String pattern) {
+	public Mono<Void> unlinkKeys(String pattern) {
 		RKeysReactive rKeys = this.client.getKeys();
-		rKeys.getKeys(KeysScanOptions.defaults().pattern(pattern)).flatMap(rKeys::unlink, 8).subscribe();
+		return rKeys.getKeys(KeysScanOptions.defaults().pattern(pattern)).flatMap(rKeys::unlink, 8).then();
 	}
 
 }

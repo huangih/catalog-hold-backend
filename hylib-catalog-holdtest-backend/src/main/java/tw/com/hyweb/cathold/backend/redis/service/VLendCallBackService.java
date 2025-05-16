@@ -19,8 +19,6 @@ public class VLendCallBackService {
 
 	private static final String LEND_CALLBACK = "bl:blc:cbId:%s:lendCallback";
 
-	private static final String LEND_CALLBACK_LOCK = "bl:blc:lid:%d:lock";
-
 	private static final String MOBILE_LEND_CALLBACK = "bl:blc:bs:%s:barcode";
 
 	private final LendLog2Service lendLog2Service;
@@ -33,7 +31,9 @@ public class VLendCallBackService {
 			return this.redisUtils.hasKey(redisKey).map(b -> !b);
 		}).next().doOnNext(cbId -> this.lendLog2Service.saveLendLog2PreCheck(lendCallback))
 				.flatMap(cbId -> this.redisUtils
-						.redisLockCache(String.format(LEND_CALLBACK, cbId), lendCallback, Duration.ofMinutes(5))
+						.getMonoFromWriteLock(LEND_CALLBACK,
+								() -> this.redisUtils.saveForCache(String.format(LEND_CALLBACK, cbId), lendCallback,
+										Duration.ofMinutes(5)))
 						.map(lc -> new LendCheck((String) cbId, lc))
 						.doOnNext(lck -> log.info("prepareLendCallback: {}-{}", lck, lendCallback)));
 	}
@@ -47,11 +47,6 @@ public class VLendCallBackService {
 		if (obj instanceof String barcode)
 			return barcode;
 		return "";
-	}
-
-	public Mono<Boolean> lendCheck(LendCallback lendCallback, LendCheck lendCheck) {
-		String lock = String.format(LEND_CALLBACK_LOCK, lendCallback.getLogId());
-		return this.redisUtils.getMonoFromLock(lock, () -> lendCallback.lendCheck(lendCheck));
 	}
 
 }

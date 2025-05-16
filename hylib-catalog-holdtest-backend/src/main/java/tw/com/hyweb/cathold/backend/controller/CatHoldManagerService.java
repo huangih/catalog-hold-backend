@@ -21,8 +21,12 @@ public interface CatHoldManagerService {
 
 	Mono<ServerResponse> delRedisCache(ServerRequest request);
 
+	Mono<ServerResponse> getClySiteDest(ServerRequest request);
+
 	Mono<ServerResponse> getBookingViewForNcl(ServerRequest request);
 
-//	public Flux<BookingNclView> getBookingViewsForNcl(LocalDate begDate, LocalDate endDate);
-//
+	Mono<ServerResponse> aduItemCtrlRules(ServerRequest request);
+
+	Mono<ServerResponse> refreshHoldFromHylib(ServerRequest request);
+	
 }

@@ -6,7 +6,6 @@ import org.springframework.amqp.core.AsyncAmqpTemplate;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
-import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.AsyncRabbitTemplate;
@@ -23,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.PropertySource;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import net.bytebuddy.utility.RandomString;
 import tw.com.hyweb.cathold.backend.service.AmqpBackendService;
 import tw.com.hyweb.cathold.backend.service.FuncNameHeaderListener;
 
@@ -33,9 +31,6 @@ public class AmqpConfiguration {
 
 	@Value("${cathold.exchange.name}")
 	private String exchangeName;
-
-	@Value("${cathold.exchange.fanout.name}")
-	private String fanoutExchangeName;
 
 	@Value("${cathold.exchange.stream.name}")
 	private String streamExchangeName;
@@ -47,11 +42,6 @@ public class AmqpConfiguration {
 	@Primary
 	DirectExchange directExchange() {
 		return new DirectExchange(exchangeName);
-	}
-
-	@Bean
-	FanoutExchange fanoutExchange() {
-		return new FanoutExchange(fanoutExchangeName);
 	}
 
 	@Bean
@@ -71,18 +61,7 @@ public class AmqpConfiguration {
 	}
 
 	@Bean
-	Queue tcQueue() {
-		String name = "backend-" + RandomString.make();
-		return QueueBuilder.durable(name).autoDelete().build();
-	}
-
-	@Bean
-	Binding tcBinding(@Qualifier("tcQueue") Queue queue, DirectExchange exchange) {
-		return BindingBuilder.bind(queue).to(exchange).withQueueName();
-	}
-
-	@Bean
-	MessageConverter messageConverter(ObjectMapper objectMapper) {
+	MessageConverter messageConverter(@Qualifier("objectMapper") ObjectMapper objectMapper) {
 		return new Jackson2JsonMessageConverter(objectMapper);
 	}
 
@@ -104,12 +83,12 @@ public class AmqpConfiguration {
 
 	@Bean
 	MessageListenerContainer listenerContainer(ConnectionFactory factory, MessageConverter messageConverter,
-			AmqpBackendService amqpBackendService, Queue queue, @Qualifier("tcQueue") Queue tcQueue) {
+			AmqpBackendService amqpBackendService, Queue queue) {
 		var container = new DirectMessageListenerContainer(factory);
 		var listener = new FuncNameHeaderListener(amqpBackendService, messageConverter);
 		container.setConsumersPerQueue(5);
 		container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-		container.addQueues(queue, tcQueue);
+		container.addQueues(queue);
 		container.setMessageListener(listener);
 		return container;
 	}

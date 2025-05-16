@@ -24,8 +24,8 @@ public class VUserCtrlStatusService {
 	private Mono<Boolean> checkUserRule(int readerId, int ruleNum) {
 		String idString = String.format(BOOLEAN_USERID_RULENUM, readerId, ruleNum);
 		return this.redisUtils.getMonoFromRedis(idString, Duration.ofHours(1)).cast(Boolean.class)
-				.switchIfEmpty(this.redisUtils.getMonoFromDatabase(idString,
-						() -> userCtrlRuleService.checkUserRule(readerId, ruleNum), Duration.ofHours(1)));
+				.switchIfEmpty(this.userCtrlRuleService.checkUserRule(readerId, ruleNum)
+						.doOnNext(b -> this.redisUtils.redisLockCache(idString, b, Duration.ofHours(1))));
 	}
 
 	public Mono<Boolean> processCheck(int userRule, int readerId) {

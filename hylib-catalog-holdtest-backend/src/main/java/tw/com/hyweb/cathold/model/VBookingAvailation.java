@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
 
@@ -39,7 +40,7 @@ public class VBookingAvailation implements Serializable {
 
 	private int noticeId;
 
-	private Character ntype;
+	private String ntype;
 
 	private Boolean linepush;
 
@@ -48,5 +49,9 @@ public class VBookingAvailation implements Serializable {
 	private LocalDate duePickupDate;
 
 	private Phase phase;
+
+	public VBookingAvailation(VBookingAvailationHistory vBookingAvailationHistory) {
+		BeanUtils.copyProperties(vBookingAvailationHistory, this);
+	}
 
 }
