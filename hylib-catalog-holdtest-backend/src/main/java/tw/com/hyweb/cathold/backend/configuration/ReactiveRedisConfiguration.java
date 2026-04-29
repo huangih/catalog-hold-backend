@@ -36,8 +36,7 @@ public class ReactiveRedisConfiguration {
 		om.setDateFormat(new SimpleDateFormat(DEFAULT_DATE_TIME_FORMAT));
 		om.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 		om.setVisibility(PropertyAccessor.ALL, Visibility.ANY);
-		om.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-//		om.activateDefaultTyping(om.getPolymorphicTypeValidator(), DefaultTyping.NON_FINAL, As.PROPERTY);
+		om.setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL);
 		return om;
 	}
 
@@ -48,7 +47,7 @@ public class ReactiveRedisConfiguration {
 		om.setDateFormat(new SimpleDateFormat(DEFAULT_DATE_TIME_FORMAT));
 		om.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 		om.setVisibility(PropertyAccessor.ALL, Visibility.ANY);
-		om.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+		om.setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL);
 		om.activateDefaultTyping(om.getPolymorphicTypeValidator(), DefaultTyping.NON_FINAL, As.WRAPPER_ARRAY);
 		return om;
 	}

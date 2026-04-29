@@ -27,6 +27,7 @@ import tw.com.hyweb.cathold.model.TouchCallback;
 import tw.com.hyweb.cathold.model.TouchLog;
 import tw.com.hyweb.cathold.model.TradeoffStopBookingResult;
 import tw.com.hyweb.cathold.model.VBookingAvailation;
+import tw.com.hyweb.cathold.model.VBookingCabinetHold;
 import tw.com.hyweb.cathold.model.client.TouchResult;
 
 @Component
@@ -53,6 +54,9 @@ public class AmqpBackendClient {
 
 	@Value("${cathold.typesiteloc.routekey}")
 	private String itslRouteKey;
+
+	@Value("${cathold.rsocketback.routekey}")
+	private String rsRouteKey;
 
 	private final RabbitTemplate template;
 
@@ -184,12 +188,17 @@ public class AmqpBackendClient {
 		this.template.convertAndSend(this.btRouteKey, args, m -> this.setFuncNameHeader(m, "moveTransitToHistory"));
 	}
 
+	public void removeIntransit(int holdId, int muserId) {
+		this.template.convertAndSend(this.btRouteKey, new Integer[] { holdId, muserId },
+				m -> this.setFuncNameHeader(m, "removeIntransit"));
+	}
+
 	public void subWhiteUid(String barcode) {
 		this.template.convertAndSend(this.rdRouteKey, barcode, m -> this.setFuncNameHeader(m, "subWhiteUid"));
 	}
 
-	public void touchOverDueWaitingCheck(String barcode) {
-		this.template.convertAndSend(this.btRouteKey, barcode,
+	public void touchOverDueWaitingCheck(int holdId) {
+		this.template.convertAndSend(this.btRouteKey, holdId,
 				m -> this.setFuncNameHeader(m, "touchOverDueWaitingCheck"));
 	}
 
@@ -335,6 +344,20 @@ public class AmqpBackendClient {
 		return Mono.fromFuture(this.asyncAmqpTemplate.convertSendAndReceiveAsType(this.btRouteKey, args,
 				m -> this.setFuncNameHeader(m, "editReaderBookingCallVol"),
 				new ParameterizedTypeReference<BookingResult>() {
+				}));
+	}
+
+	public Mono<List<VBookingCabinetHold>> getCabinetSuggestList(int siteId) {
+		return Mono.fromFuture(this.asyncAmqpTemplate.convertSendAndReceiveAsType(this.rsRouteKey, siteId,
+				m -> this.setFuncNameHeader(m, "getCabinetSuggestList"),
+				new ParameterizedTypeReference<List<VBookingCabinetHold>>() {
+				}));
+	}
+
+	public Mono<Long> getWrongTransitList(LocalDate begDate, LocalDate endDate) {
+		return Mono.fromFuture(this.asyncAmqpTemplate.convertSendAndReceiveAsType(this.btRouteKey,
+				new LocalDate[] { begDate, endDate }, m -> this.setFuncNameHeader(m, "getWrongTransitList"),
+				new ParameterizedTypeReference<Long>() {
 				}));
 	}
 }

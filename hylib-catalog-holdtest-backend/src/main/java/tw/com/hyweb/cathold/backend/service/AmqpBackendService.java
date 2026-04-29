@@ -81,7 +81,7 @@ public class AmqpBackendService {
 
 	public Mono<CallVolHoldSummary> findCallVolHoldSummaryByCallVolId(Integer[] args) {
 		return this.vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(args[0], args[1])
-				.timeout(Duration.ofSeconds(20), Mono.just(new CallVolHoldSummary())
+				.timeout(Duration.ofSeconds(10), Mono.just(new CallVolHoldSummary())
 						.doOnNext(li -> log.warn("findCallVolHoldSummaryByCallVolId: {}-{}", args[0], args[1])));
 	}
 

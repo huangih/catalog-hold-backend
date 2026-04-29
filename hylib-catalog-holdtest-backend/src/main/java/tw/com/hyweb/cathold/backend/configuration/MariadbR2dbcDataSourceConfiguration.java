@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.mariadb.r2dbc.MariadbConnectionConfiguration;
 import org.mariadb.r2dbc.MariadbConnectionFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -26,6 +27,8 @@ import io.r2dbc.pool.ConnectionPool;
 import io.r2dbc.pool.ConnectionPoolConfiguration;
 import tw.com.hyweb.cathold.model.AppendixStatusReadConverter;
 import tw.com.hyweb.cathold.model.AppendixStatusWriteConverter;
+import tw.com.hyweb.cathold.model.PhaseCabReadConverter;
+import tw.com.hyweb.cathold.model.PhaseCabWriteConverter;
 import tw.com.hyweb.cathold.model.PhaseReadConverter;
 import tw.com.hyweb.cathold.model.PhaseWriteConverter;
 import tw.com.hyweb.cathold.model.ResultPhaseReadConverter;
@@ -39,11 +42,21 @@ import tw.com.hyweb.cathold.model.SuspendPhaseWriteConverter;
 @Configuration
 public class MariadbR2dbcDataSourceConfiguration {
 
+	@Value("${DBHOST_PORT:tml-230.tpml.edu.tw:3306}")
+	private String dbHostPort;
+
 	@Bean
 	ConnectionPool mariadbConnectionPool() {
 		Map<String, String> map = new HashMap<>();
 		map.put("characterencoding", "utf8");
-		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host("tml-230.tpml.edu.tw")
+		String host = this.dbHostPort;
+		int port = 3306;
+		int index = this.dbHostPort.indexOf(':');
+		if (index > 0) {
+			host = this.dbHostPort.substring(0, index).trim();
+			port = Integer.parseInt(this.dbHostPort.substring(index + 1).trim());
+		}
+		MariadbConnectionConfiguration conf = MariadbConnectionConfiguration.builder().host(host).port(port)
 				.database("cal_vol_test").username("hyweb").password("1qaz@WSX3edc").useServerPrepStmts(true)
 				.prepareCacheSize(512).connectionAttributes(map).build();
 		ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(new MariadbConnectionFactory(conf))
@@ -57,9 +70,9 @@ public class MariadbR2dbcDataSourceConfiguration {
 	R2dbcEntityOperations calVolR2dbcEntityTemplate() {
 		List<Converter<?, ?>> converters = Arrays.asList(new AppendixStatusReadConverter(),
 				new AppendixStatusWriteConverter(), new PhaseReadConverter(), new PhaseWriteConverter(),
-				new ResultPhaseReadConverter(), new ResultPhaseWriteConverter(), new RulePickupReadConverter(),
-				new RuleStatusReadConverter(), new RuleStatusWriteConverter(), new SuspendPhaseReadConverter(),
-				new SuspendPhaseWriteConverter());
+				new PhaseCabReadConverter(), new PhaseCabWriteConverter(), new ResultPhaseReadConverter(),
+				new ResultPhaseWriteConverter(), new RulePickupReadConverter(), new RuleStatusReadConverter(),
+				new RuleStatusWriteConverter(), new SuspendPhaseReadConverter(), new SuspendPhaseWriteConverter());
 		R2dbcCustomConversions r2dbcCustomConversions = R2dbcCustomConversions.of(MySqlDialect.INSTANCE, converters);
 		R2dbcMappingContext context = new R2dbcMappingContext(DefaultNamingStrategy.INSTANCE);
 		R2dbcConverter r2dbcConverter = new MappingR2dbcConverter(context, r2dbcCustomConversions);

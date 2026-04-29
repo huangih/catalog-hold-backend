@@ -34,8 +34,8 @@ public class VTouchLogService {
 
 	private final ReactiveRedisUtils redisUtils;
 
-	public Mono<TouchLog> newTouchLog(String barcode, int clientId) {
-		return this.calVolTemplate.insert(new TouchLog(barcode, clientId));
+	public Mono<TouchLog> newTouchLog(String barcode, int clientId, int muserId) {
+		return this.calVolTemplate.insert(new TouchLog(barcode, clientId, muserId));
 	}
 
 	public void updatePreTime(TouchLog touchLog, int type) {

@@ -30,6 +30,7 @@ public class WebRouterFuctionsConfiguration {
 				.andRoute(GET("/getReaderBookingHistories"), catvolBookingService::getReaderBookingHistories)
 				.andRoute(GET("/getReaderStopBookingInfo"), catvolBookingService::getReaderStopBookingInfo)
 				.andRoute(GET("/getReaderSuspendBooking"), catvolBookingService::getReaderSuspendBooking)
+				.andRoute(GET("/getTodayBookingInfo"), catvolBookingService::getTodayBookingInfo)
 				.andRoute(GET("/readerCanLendHold"), catvolBookingService::readerCanLendHold)
 				.andRoute(POST("/lendCheckCallback"), catvolBookingService::lendCheckCallback)
 				.andRoute(GET("/canRenewLends"), catvolBookingService::canRenewLends)
@@ -52,7 +53,7 @@ public class WebRouterFuctionsConfiguration {
 				.andRoute(GET("/getSiteBookingDistributions"), catvolBookingService::getSiteBookingDistributions)
 				.andRoute(GET("/getReaderExpandDuesOnMonth"), catvolBookingService::getReaderExpandDuesOnMonth)
 				.andRoute(POST("/expandAvailDueDate"), catvolBookingService::expandAvailDueDate)
-				.andRoute(POST("/addDueDateRule"), catvolBookingService::addDueDateRule)
+				.andRoute(POST("/addBookingDueDateRule"), catvolBookingService::addBookingDueDateRule)
 				.andRoute(POST("/addBookingCloseDate"), catvolBookingService::addBookingCloseDate)
 				.andRoute(POST("/addNoticeSmsRule"), catvolBookingService::addNoticeSmsRule)
 				.andRoute(GET("/getBookingDueDateRules"), catvolBookingService::getBookingDueDateRules)
@@ -84,7 +85,8 @@ public class WebRouterFuctionsConfiguration {
 				.andRoute(GET("/getTransitOverdaysStaticView"), catvolBookingService::getTransitOverdaysStaticView)
 				.andRoute(GET("/getDistriFoundStatics"), catvolBookingService::getDistriFoundStatics)
 				.andRoute(POST("/editReaderBookingCallVol"), catvolBookingService::editReaderBookingCallVol)
-				.andRoute(POST("/tradeoffStopBookingDays"), catvolBookingService::tradeoffStopBookingDays);
+				.andRoute(POST("/tradeoffStopBookingDays"), catvolBookingService::tradeoffStopBookingDays)
+				.andRoute(GET("/getCabinetSuggestList"), catvolBookingService::getCabinetSuggestList);
 	}
 
 	@Bean
@@ -104,6 +106,7 @@ public class WebRouterFuctionsConfiguration {
 				.andRoute(GET("/getClySiteDest"), catHoldManagerService::getClySiteDest)
 				.andRoute(GET("/getBookingViewForNcl"), catHoldManagerService::getBookingViewForNcl)
 				.andRoute(GET("/aduItemCtrlRules"), catHoldManagerService::aduItemCtrlRules)
-				.andRoute(GET("/refreshHoldFromHylib"), catHoldManagerService::refreshHoldFromHylib);
+				.andRoute(GET("/refreshHoldFromHylib"), catHoldManagerService::refreshHoldFromHylib)
+				.andRoute(GET("/getWrongTransitList"), catHoldManagerService::getWrongTransitList);
 	}
 }

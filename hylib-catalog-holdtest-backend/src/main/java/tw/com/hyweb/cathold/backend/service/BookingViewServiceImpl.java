@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -16,9 +15,6 @@ import static org.springframework.data.relational.core.query.Criteria.where;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 import tw.com.hyweb.cathold.backend.redis.service.VBookingService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldItemService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldItemsService;
@@ -32,11 +28,13 @@ import tw.com.hyweb.cathold.model.Intransit;
 import tw.com.hyweb.cathold.model.Phase;
 import tw.com.hyweb.cathold.model.UserStopBooking;
 import tw.com.hyweb.cathold.model.UserSuspendBooking;
+import tw.com.hyweb.cathold.model.VBookingCabinetHold;
 import tw.com.hyweb.cathold.model.VHoldItem;
 import tw.com.hyweb.cathold.model.view.BookingHistories;
 import tw.com.hyweb.cathold.model.view.BookingHistoryView;
 import tw.com.hyweb.cathold.model.view.BookingNclView;
 import tw.com.hyweb.cathold.model.view.BookingView;
+import tw.com.hyweb.cathold.model.view.BookingViewComparator;
 import tw.com.hyweb.cathold.model.view.IntransitView;
 import tw.com.hyweb.cathold.model.view.MarcVolume;
 import tw.com.hyweb.cathold.model.view.ReaderBookingSummary;
@@ -44,11 +42,14 @@ import tw.com.hyweb.cathold.model.view.ReaderBookingSummary;
 @RequiredArgsConstructor
 public class BookingViewServiceImpl implements BookingViewService {
 
-	private static final List<Phase> AVAIL_PHASES = Arrays.asList(Phase.AVAILABLE, Phase.A01_ORDER);
+	private static final List<Phase> AVAIL_PHASES = Arrays.asList(Phase.AVAILABLE, Phase.A01_ORDER, Phase.CAB_WAIT,
+			Phase.OVERDUE_BOOKING_WAITING);
 
 	private static final String USER_ID = "userId";
 
 	private static final String BOOKING_ID = "bookingId";
+
+	private static final String PHASE = "phase";
 
 	private static final String UPDATE_TIME = "updateTime";
 
@@ -70,12 +71,10 @@ public class BookingViewServiceImpl implements BookingViewService {
 	public Flux<BookingView> getReaderBookingViews(int readerId, int skip, int take, Boolean isAvailation,
 			boolean containCopy) {
 		return this.calVolTemplate.select(query(where(USER_ID).is(readerId)), Booking.class)
-				.filter(bi -> this
-						.filterBookingAvailOrCopy(isAvailation, containCopy, "C".equals(bi.getType()), bi.getPhase()))
-				.sort(this::sortBooking).skip(skip).take(take).zipWith(Flux.range(1, take))
-				.flatMap(tuple2 -> Mono.just(tuple2).publishOn(Schedulers.parallel())
-						.flatMap(tup2 -> this.convert2BookingView(tup2.getT1()).map(bv -> Tuples.of(bv, tup2.getT2()))))
-				.sort(Comparator.comparing(Tuple2::getT2)).map(Tuple2::getT1);
+				.filter(bi -> this.filterBookingAvailOrCopy(isAvailation, containCopy, "C".equals(bi.getType()),
+						bi.getPhase()))
+				.sort(BookingViewComparator.INSTANCE).skip(skip).take(take)
+				.flatMapSequential(this::convert2BookingView);
 	}
 
 	private boolean filterBookingAvailOrCopy(Boolean isAvailation, boolean containCopy, boolean isCopyType,
@@ -87,37 +86,6 @@ public class BookingViewServiceImpl implements BookingViewService {
 				return containCopy;
 			return isAvailation == null || !isAvailation;
 		}
-	}
-
-	private int sortBooking(Booking b1, Booking b2) {
-		List<Phase> sortPhases = new ArrayList<>();
-		sortPhases.addAll(Arrays.asList(Phase.TRANSIT_B, Phase.WAIT_ANNEX));
-		sortPhases.addAll(AVAIL_PHASES);
-		Phase phase1 = b1.getPhase();
-		Phase phase2 = b2.getPhase();
-		if (AVAIL_PHASES.contains(phase1))
-			return AVAIL_PHASES.contains(phase2) ? b1.getDueDate().compareTo(b2.getDueDate()) : -1;
-		if (Phase.TRANSIT_B == phase1)
-			return this.sortTransitBooking(b1, b2);
-		if (Phase.WAIT_ANNEX == phase1) {
-			if (phase1.equals(phase2))
-				return b1.getAvailableDate().compareTo(b2.getAvailableDate());
-			return AVAIL_PHASES.contains(phase2) || Phase.TRANSIT_B == phase2 ? 1 : -1;
-		}
-		return sortPhases.contains(phase2) ? 1 : b1.getPlaceDate().compareTo(b2.getPlaceDate());
-	}
-
-	private int sortTransitBooking(Booking b1, Booking b2) {
-		Phase phase1 = b1.getPhase();
-		Phase phase2 = b2.getPhase();
-		if (phase1.equals(phase2)) {
-			if (b1.getTransitDate() == null)
-				return -1;
-			if (b2.getTransitDate() == null)
-				return 1;
-			return b1.getTransitDate().compareTo(b2.getTransitDate());
-		}
-		return AVAIL_PHASES.contains(phase2) ? 1 : -1;
 	}
 
 	@Override
@@ -185,8 +153,9 @@ public class BookingViewServiceImpl implements BookingViewService {
 			Stream.of(Phase.OVERDUE_BOOKING, Phase.OVERDUE_BOOKING_WAITING, Phase.ON_STOP_BOOKING).forEach(phases::add);
 			if (overNotAvail)
 				Stream.of(Phase.OVERDUE_CANCEL, Phase.END_STOP_BOOKING, Phase.OVERDUE_OVER_AVAIL).forEach(phases::add);
-			return this.calVolTemplate.select(query(where(USER_ID).is(readerId).and("phase").in(phases))
-					.sort(Sort.by(Direction.DESC, UPDATE_TIME)), BookingHistory.class);
+			return this.calVolTemplate.select(
+					query(where(USER_ID).is(readerId).and(PHASE).in(phases)).sort(Sort.by(Direction.DESC, UPDATE_TIME)),
+					BookingHistory.class);
 		}
 		return this.calVolTemplate.select(query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, UPDATE_TIME)),
 				BookingHistory.class);
@@ -198,7 +167,7 @@ public class BookingViewServiceImpl implements BookingViewService {
 			Stream.of(Phase.OVERDUE_BOOKING, Phase.OVERDUE_BOOKING_WAITING, Phase.ON_STOP_BOOKING).forEach(phases::add);
 			if (overNotAvail)
 				Stream.of(Phase.OVERDUE_CANCEL, Phase.END_STOP_BOOKING, Phase.OVERDUE_OVER_AVAIL).forEach(phases::add);
-			return this.calVolTemplate.count(query(where(USER_ID).is(readerId).and("phase").in(phases)),
+			return this.calVolTemplate.count(query(where(USER_ID).is(readerId).and(PHASE).in(phases)),
 					BookingHistory.class);
 		}
 		return this.calVolTemplate.count(query(where(USER_ID).is(readerId)), BookingHistory.class);
@@ -210,35 +179,40 @@ public class BookingViewServiceImpl implements BookingViewService {
 		Phase phase = bookingView.getPhase();
 		long bId = booking.getId();
 		switch (phase) {
-		case AVAILABLE, WAIT_ANNEX, A01_ORDER ->
-			mono = this.calVolTemplate.selectOne(query(where(BOOKING_ID).is(bId)), BookingAvailation.class).map(ba -> {
-				bookingView.setAvailSeqNum(ba.getAvailSeqNum());
-				bookingView.setExpDuedateType(ba.isExpDuedateMark());
-				bookingView.setNoticeId(ba.getNoticeId());
-				return bookingView;
-			}).defaultIfEmpty(bookingView).flatMap(bv -> {
-				bv.setAvailableDateTime(booking.getAvailableDate());
-				bv.setAvailableDate(booking.getAvailableDate().toLocalDate());
-				return this.calVolTemplate.exists(query(where(BOOKING_ID).is(bId)), BookingExpandDuedate.class)
-						.map(b -> {
-							bv.setHadExpDueDate(b);
-							return b;
-						}).flatMap(b -> this.itemSiteDefService.allowExpandDueDateBySiteIdAndAvailDate(
-								booking.getPickupSiteId(), booking.getAvailableDate()))
-						.map(b1 -> {
-							bv.setExpDuedateSite(b1);
-							if (booking.getDueDate() != null)
-								bv.setDuePickupDate(booking.getDueDate());
-							bv.setHoldId(booking.getAssociateId());
-							return bv;
-						});
-			});
+		case AVAILABLE, WAIT_ANNEX, A01_ORDER, CAB_WAIT ->
+			mono = this.calVolTemplate.selectOne(query(where(BOOKING_ID).is(bId)), BookingAvailation.class)
+					.flatMap(ba -> this.convertAvailSeqNum(ba).map(s -> {
+						bookingView.setAvailSeqNum(s);
+						bookingView.setExpDuedateType(ba.isExpDuedateMark());
+						bookingView.setNoticeId(ba.getNoticeId());
+						return bookingView;
+					})).defaultIfEmpty(bookingView).flatMap(bv -> {
+						LocalDateTime availDate = booking.getAvailableDate();
+						if (availDate != null) {
+							bv.setAvailableDateTime(availDate);
+							bv.setAvailableDate(availDate.toLocalDate());
+						}
+						return this.calVolTemplate.exists(query(where(BOOKING_ID).is(bId)), BookingExpandDuedate.class)
+								.map(b -> {
+									bv.setHadExpDueDate(b);
+									return b;
+								}).flatMap(b -> this.itemSiteDefService.allowExpandDueDateBySiteIdAndAvailDate(
+										booking.getPickupSiteId(), availDate))
+								.map(b1 -> {
+									bv.setExpDuedateSite(b1);
+									if (booking.getDueDate() != null)
+										bv.setDuePickupDate(booking.getDueDate());
+									bv.setHoldId(booking.getAssociateId());
+									return bv;
+								});
+					});
 
-		case TRANSIT_B -> mono = this.calVolTemplate
-				.selectOne(query(where("holdId").is(booking.getAssociateId())), Intransit.class).map(it -> {
-					bookingView.setIntransit(new IntransitView(it));
-					return bookingView;
-				});
+		case TRANSIT_B ->
+			mono = this.calVolTemplate.selectOne(query(where("holdId").is(booking.getAssociateId())), Intransit.class)
+					.defaultIfEmpty(new Intransit(booking.getTransitDate())).map(it -> {
+						bookingView.setIntransit(new IntransitView(it));
+						return bookingView;
+					});
 
 		case PLACE, SUSPENSION, DISTRIBUTION ->
 			mono = Mono.just("T".equals(booking.getType())).filter(b -> b).map(b -> booking.getItemId())
@@ -261,10 +235,18 @@ public class BookingViewServiceImpl implements BookingViewService {
 		return mono;
 	}
 
+	private Mono<String> convertAvailSeqNum(BookingAvailation bookingAvailation) {
+		if (bookingAvailation.getSeqNum() == -2)
+			return this.calVolTemplate
+					.selectOne(query(where(BOOKING_ID).is(bookingAvailation.getBookingId())), VBookingCabinetHold.class)
+					.map(VBookingCabinetHold::getCabinetCode).defaultIfEmpty(bookingAvailation.getAvailSeqNum());
+		return Mono.just(bookingAvailation.getAvailSeqNum());
+	}
+
 	@Override
 	public Flux<BookingHistoryView> getReaderOnStopBookingHistories(int readerId, Phase onStopBooking) {
 		return this.calVolTemplate
-				.select(query(where(USER_ID).is(readerId).and("phase").is(onStopBooking)).sort(Sort.by("inActiveDate")),
+				.select(query(where(USER_ID).is(readerId).and(PHASE).is(onStopBooking)).sort(Sort.by("inActiveDate")),
 						BookingHistory.class)
 				.flatMap(this::convert2BookingView);
 	}
@@ -293,15 +275,15 @@ public class BookingViewServiceImpl implements BookingViewService {
 				.map(Long::intValue);
 		Mono<List<BookingView>> abvsMono = this.getBookingViewsByReaderId(readerId, true).collectList();
 		Mono<List<BookingHistoryView>> odbvsMono = this.calVolTemplate
-				.select(query(where(USER_ID).is(readerId).and("phase").in(odPhases)).sort(Sort.by(UPDATE_TIME)),
+				.select(query(where(USER_ID).is(readerId).and(PHASE).in(odPhases)).sort(Sort.by(UPDATE_TIME)),
 						BookingHistory.class)
 				.flatMapSequential(this::convert2BookingView).collectList();
 		Mono<Integer> bedNumMono = this.bookingExpandDuedateService.getExpandDuedatesOnMonthNum(readerId);
 		Mono<UserSuspendBooking> usbMono = this.calVolTemplate
 				.select(query(where(USER_ID).is(readerId)).sort(Sort.by(Direction.DESC, "id")),
 						UserSuspendBooking.class)
-				.next();
-		return Mono.zip(biNumMono, abvsMono, odbvsMono, bedNumMono, usbMono).map(tup5 -> new ReaderBookingSummary(tup5))
+				.next().defaultIfEmpty(new UserSuspendBooking());
+		return Mono.zip(biNumMono, abvsMono, odbvsMono, bedNumMono, usbMono).map(ReaderBookingSummary::new)
 				.flatMap(rbs -> {
 					rbs.setUserId(readerId);
 					return this.calVolTemplate.selectOne(query(where(USER_ID).is(readerId).and("available").isTrue()),

@@ -4,7 +4,6 @@ import java.time.Duration;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.utility.RandomString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,7 +13,6 @@ import tw.com.hyweb.cathold.model.LendCheck;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class VLendCallBackService {
 
 	private static final String LEND_CALLBACK = "bl:blc:cbId:%s:lendCallback";
@@ -30,12 +28,12 @@ public class VLendCallBackService {
 			String redisKey = String.format(LEND_CALLBACK, cbId);
 			return this.redisUtils.hasKey(redisKey).map(b -> !b);
 		}).next().doOnNext(cbId -> this.lendLog2Service.saveLendLog2PreCheck(lendCallback))
-				.flatMap(cbId -> this.redisUtils
-						.getMonoFromWriteLock(LEND_CALLBACK,
-								() -> this.redisUtils.saveForCache(String.format(LEND_CALLBACK, cbId), lendCallback,
-										Duration.ofMinutes(5)))
-						.map(lc -> new LendCheck((String) cbId, lc))
-						.doOnNext(lck -> log.info("prepareLendCallback: {}-{}", lck, lendCallback)));
+				.flatMap(
+						cbId -> this.redisUtils
+								.getMonoFromWriteLock(LEND_CALLBACK,
+										() -> this.redisUtils.saveForCache(String.format(LEND_CALLBACK, cbId),
+												lendCallback, Duration.ofMinutes(5)))
+								.map(lc -> new LendCheck((String) cbId, lc)));
 	}
 
 	public Mono<LendCallback> getLendCallback(String callbackId) {

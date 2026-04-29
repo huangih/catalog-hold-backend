@@ -3,8 +3,6 @@ package tw.com.hyweb.cathold.model.view;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -28,7 +26,7 @@ public class BookingView implements Serializable {
 
 	private MarcVolume marcVolume;
 
-	private OffsetDateTime placeDate;
+	private LocalDateTime placeDate;
 
 	private String type;
 
@@ -47,15 +45,15 @@ public class BookingView implements Serializable {
 	private boolean canModify = false;
 
 	private boolean canCanceled = false;
-	
+
 	private LocalDate distributeDate;
-	
+
 	private LocalDate availableDate;
 
 	private LocalDateTime availableDateTime;
 
 	private String availSeqNum;
-	
+
 	private boolean hotCallvol;
 
 	private boolean hadExpDueDate;
@@ -63,7 +61,7 @@ public class BookingView implements Serializable {
 	private boolean expDuedateSite = true;
 
 	private boolean expDuedateType = true;
-	
+
 	private LocalDate duePickupDate;
 
 	public BookingView(Booking booking) {
@@ -71,7 +69,8 @@ public class BookingView implements Serializable {
 		this.readerId = booking.getUserId();
 		this.pickupSiteId = booking.getPickupSiteId();
 		this.type = booking.getType();
+		this.holdId = booking.getAssociateId();
 		this.phase = booking.getPhase();
-		this.placeDate = booking.getPlaceDate().atOffset(ZoneOffset.UTC);
+		this.placeDate = booking.getPlaceDate();
 	}
 }

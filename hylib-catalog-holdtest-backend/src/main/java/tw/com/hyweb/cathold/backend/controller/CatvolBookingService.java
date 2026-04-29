@@ -19,6 +19,8 @@ public interface CatvolBookingService {
 
 	Mono<ServerResponse> getReaderSuspendBooking(ServerRequest request);
 
+	Mono<ServerResponse> getTodayBookingInfo(ServerRequest request);
+
 	Mono<ServerResponse> readerCanLendHold(ServerRequest request);
 
 	Mono<ServerResponse> lendCheckCallback(ServerRequest request);
@@ -57,7 +59,7 @@ public interface CatvolBookingService {
 
 	Mono<ServerResponse> expandAvailDueDate(ServerRequest request);
 
-	Mono<ServerResponse> addDueDateRule(ServerRequest request);
+	Mono<ServerResponse> addBookingDueDateRule(ServerRequest request);
 
 	Mono<ServerResponse> addBookingCloseDate(ServerRequest request);
 
@@ -122,5 +124,7 @@ public interface CatvolBookingService {
 	Mono<ServerResponse> editReaderBookingCallVol(ServerRequest request);
 
 	Mono<ServerResponse> tradeoffStopBookingDays(ServerRequest request);
+
+	Mono<ServerResponse> getCabinetSuggestList(ServerRequest request);
 
 }

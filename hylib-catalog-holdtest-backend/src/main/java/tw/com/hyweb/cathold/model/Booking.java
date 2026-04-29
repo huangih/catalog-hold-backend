@@ -57,10 +57,6 @@ public class Booking implements Serializable {
 
 	private int oldId;
 
-	private long userKey;
-
-	private String barcode;
-
 	public Booking(int userId, int itemId, String type) {
 		this.userId = userId;
 		this.itemId = itemId;
@@ -70,13 +66,6 @@ public class Booking implements Serializable {
 	public Booking(int userId, int itemId, String type, int pickupSiteId) {
 		this(userId, itemId, type);
 		this.pickupSiteId = pickupSiteId;
-	}
-
-	public Booking(int userId, int itemId, String type, int oldId, long userKey, String barcode) {
-		this(userId, itemId, type);
-		this.oldId = oldId;
-		this.userKey = userKey;
-		this.barcode = barcode;
 	}
 
 	public Booking transitSuspend() {
@@ -94,13 +83,13 @@ public class Booking implements Serializable {
 		return booking;
 	}
 
-	public Booking(BookingHistory bh) {
-		BeanUtils.copyProperties(bh, this);
-		this.phase = Phase.PLACE;
-		this.associateId = 0;
-		this.dueDate = null;
-	}
-
+//	public Booking(BookingHistory bh) {
+//		BeanUtils.copyProperties(bh, this);
+//		this.phase = Phase.PLACE;
+//		this.associateId = 0;
+//		this.dueDate = null;
+//	}
+//
 	public Booking(Booking booking) {
 		BeanUtils.copyProperties(booking, this);
 		this.id = 0;

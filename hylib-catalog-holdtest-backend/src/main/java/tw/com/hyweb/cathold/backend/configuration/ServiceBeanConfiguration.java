@@ -46,6 +46,8 @@ import tw.com.hyweb.cathold.backend.service.AmqpStreamService;
 import tw.com.hyweb.cathold.backend.service.AmqpStreamServiceImpl;
 import tw.com.hyweb.cathold.backend.service.TouchService;
 import tw.com.hyweb.cathold.backend.service.TouchServiceImpl;
+import tw.com.hyweb.cathold.backend.service.TransitHistoryService;
+import tw.com.hyweb.cathold.backend.service.TransitHistoryServiceImpl;
 import tw.com.hyweb.cathold.backend.service.TransitOverdaysService;
 import tw.com.hyweb.cathold.backend.service.TransitOverdaysServiceImpl;
 import tw.com.hyweb.cathold.backend.service.UserCheckService;
@@ -72,23 +74,23 @@ public class ServiceBeanConfiguration {
 			BookingResultViewService bookingResultViewService, BookingExpandDuedateService bookingExpandDuedateService,
 			BookingStatusViewService bookingStatusViewService, ItemSiteDefService itemSiteDefService,
 			UserStopBookingService userStopBookingService, UserSuspendBookingService userSuspendBookingService,
-			LendCheckService lendCheckService, VMarcHoldSummaryService vMarcHoldSummaryService,
-			VCallVolHoldSummaryService vCallVolHoldSummaryService, VHoldItemService vHoldItemService,
-			VHoldClientService vHoldClientService, TouchService touchService, R2dbcEntityOperations calVolTemplate,
-			AmqpBackendClient amqpBackendClient) {
+			LendCheckService lendCheckService, VBookingService vBookingService,
+			VMarcHoldSummaryService vMarcHoldSummaryService, VCallVolHoldSummaryService vCallVolHoldSummaryService,
+			VHoldItemService vHoldItemService, VHoldClientService vHoldClientService, TouchService touchService,
+			R2dbcEntityOperations calVolTemplate, AmqpBackendClient amqpBackendClient) {
 		return new CatvolBookingServiceImpl(bookingViewService, bookingResultViewService, bookingExpandDuedateService,
 				bookingStatusViewService, itemSiteDefService, userStopBookingService, userSuspendBookingService,
-				lendCheckService, vMarcHoldSummaryService, vCallVolHoldSummaryService, vHoldItemService,
-				vHoldClientService, touchService, calVolTemplate, amqpBackendClient);
+				lendCheckService, vBookingService, vMarcHoldSummaryService, vCallVolHoldSummaryService,
+				vHoldItemService, vHoldClientService, touchService, calVolTemplate, amqpBackendClient);
 	}
 
 	@Bean
 	CatHoldManagerService catHoldManagerService(BookingViewService bookingViewService,
 			ClyTransitService clyTransitService, ItemSiteDefService itemSiteDefService,
-			AmqpStreamService streamBackendService, AmqpBackendClient amqpBackendClient,
-			ReactiveRedisUtils redisUtils) {
+			TransitHistoryService transitHistoryService, AmqpStreamService streamBackendService,
+			AmqpBackendClient amqpBackendClient, ReactiveRedisUtils redisUtils) {
 		return new CatHoldManagerServiceImpl(bookingViewService, clyTransitService, itemSiteDefService,
-				streamBackendService, amqpBackendClient, redisUtils);
+				transitHistoryService, streamBackendService, amqpBackendClient, redisUtils);
 	}
 
 	@Bean
@@ -151,6 +153,11 @@ public class ServiceBeanConfiguration {
 	@Bean
 	TransitOverdaysService transitOverdaysService(R2dbcEntityOperations calVolTemplate) {
 		return new TransitOverdaysServiceImpl(calVolTemplate);
+	}
+
+	@Bean
+	TransitHistoryService transitHistoryService(R2dbcEntityOperations calVolTemplate) {
+		return new TransitHistoryServiceImpl(calVolTemplate);
 	}
 
 	@Bean

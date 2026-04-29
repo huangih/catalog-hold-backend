@@ -28,5 +28,7 @@ public interface CatHoldManagerService {
 	Mono<ServerResponse> aduItemCtrlRules(ServerRequest request);
 
 	Mono<ServerResponse> refreshHoldFromHylib(ServerRequest request);
-	
+
+	Mono<ServerResponse> getWrongTransitList(ServerRequest request);
+
 }

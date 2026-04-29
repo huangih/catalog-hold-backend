@@ -10,11 +10,11 @@ import java.util.Objects;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
-import org.springframework.lang.NonNull;
-
 import static org.springframework.data.relational.core.query.Query.query;
 import static org.springframework.data.relational.core.query.Criteria.where;
 import org.springframework.stereotype.Service;
+
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;

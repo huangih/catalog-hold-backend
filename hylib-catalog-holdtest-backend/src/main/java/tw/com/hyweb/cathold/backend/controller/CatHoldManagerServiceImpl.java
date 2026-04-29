@@ -16,10 +16,12 @@ import tw.com.hyweb.cathold.backend.service.AmqpBackendClient;
 import tw.com.hyweb.cathold.backend.service.BookingViewService;
 import tw.com.hyweb.cathold.backend.service.ClyTransitService;
 import tw.com.hyweb.cathold.backend.service.ItemSiteDefService;
+import tw.com.hyweb.cathold.backend.service.TransitHistoryService;
 import tw.com.hyweb.cathold.backend.service.AmqpStreamService;
 import tw.com.hyweb.cathold.model.Booking;
 import tw.com.hyweb.cathold.model.view.BookingNclView;
 import tw.com.hyweb.cathold.model.view.BookingView;
+import tw.com.hyweb.cathold.model.view.WrongTransitList;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -30,6 +32,8 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 	private final ClyTransitService clyTransitService;
 
 	private final ItemSiteDefService itemSiteDefService;
+
+	private final TransitHistoryService trnaHistoryService;
 
 	private final AmqpStreamService amqpStreamService;
 
@@ -110,8 +114,9 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 
 	@Override
 	public Mono<ServerResponse> delRedisCache(ServerRequest request) {
-		Mono.justOrEmpty(request.queryParam("key")).subscribe(this.redisUtils::unlinkKeys);
-		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).bodyValue(true)
+		Mono<Boolean> mono = Mono.justOrEmpty(request.queryParam("key")).flatMap(this.redisUtils::unlinkKeys)
+				.thenReturn(true);
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(mono, Boolean.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -154,4 +159,14 @@ public class CatHoldManagerServiceImpl implements CatHoldManagerService {
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
+	@Override
+	public Mono<ServerResponse> getWrongTransitList(ServerRequest request) {
+		Mono<LocalDate> argMono0 = Mono.justOrEmpty(request.queryParam("begDate")).map(LocalDate::parse);
+		Mono<LocalDate> argMono1 = Mono.justOrEmpty(request.queryParam("endDate")).map(LocalDate::parse);
+		Mono<WrongTransitList> mono = Mono.zip(argMono0, argMono1)
+				.flatMap(tup2 -> this.amqpBackendClient.getWrongTransitList(tup2.getT1(), tup2.getT2()))
+				.map(Long::intValue).flatMap(this.trnaHistoryService::getWrongTransitList);
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(mono, WrongTransitList.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
+	}
 }

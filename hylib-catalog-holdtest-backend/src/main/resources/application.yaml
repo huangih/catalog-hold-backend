@@ -38,5 +38,6 @@ logging:
   level:
     '[org.springframework.cloud.function.context.config.RoutingFunction]': debug
     '[org.springframework.amqp.rabbit.*]': trace
+    '[org.springframework.web.reactive]': debug
   pattern:
     console: '%d{mm:ss.SSS} %-5p [%-31t] [%-54logger{0}] %marker%m%ex{full} - %logger - %F:%L%n'

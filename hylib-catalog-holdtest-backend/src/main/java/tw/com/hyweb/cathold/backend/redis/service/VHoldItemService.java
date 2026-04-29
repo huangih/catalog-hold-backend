@@ -48,10 +48,4 @@ public class VHoldItemService {
 				.doOnNext(this::redisCache).map(VHoldItem::getHoldId);
 	}
 
-//	public Mono<Integer> getHoldIdByBarcode(String barcode) {
-//		String idString = String.format(BARCODE_HOLDID, barcode);
-//		return this.redisUtils.getMonoFromRedis(idString, null).cast(Integer.class).switchIfEmpty(
-//				this.redisUtils.getMonoFromDatabase(idString, () -> this.getHoldIdByBarcodeFromDb(barcode), null));
-//	}
-//
 }

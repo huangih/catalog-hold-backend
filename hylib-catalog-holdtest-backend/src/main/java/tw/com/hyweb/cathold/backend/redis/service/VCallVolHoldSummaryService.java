@@ -1,15 +1,20 @@
 package tw.com.hyweb.cathold.backend.redis.service;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.data.domain.Sort;
+import org.springframework.data.r2dbc.core.R2dbcEntityOperations;
 import org.springframework.stereotype.Service;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tw.com.hyweb.cathold.backend.service.UserCheckService;
+import tw.com.hyweb.cathold.model.CalvolAllowBookingLog;
 import tw.com.hyweb.cathold.model.VHoldItem;
 import tw.com.hyweb.cathold.model.VHotBookingDate;
 import tw.com.hyweb.cathold.model.view.CallVolHoldSummary;
@@ -18,11 +23,14 @@ import tw.com.hyweb.cathold.sqlserver.repository.SqlserverChargedRepository;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VCallVolHoldSummaryService {
 
 	private static final String CVHS_CALLVOLID = "hS:callVolId:%d:CallVolHoldSummary";
 
 	private static final String MARCALLVOL_CALLVOLID = "mcv:callVolId:%d:MarcCallVolume";
+
+	private static final int RENEWLEND_OVERWAITING = 1;
 
 	private final UserCheckService userCheckService;
 
@@ -37,6 +45,8 @@ public class VCallVolHoldSummaryService {
 	private final VMarcCallVolumeService vMarcCallVolumeService;
 
 	private final ReactiveRedisUtils redisUtils;
+
+	private final R2dbcEntityOperations calVolTemplate;
 
 	public Mono<CallVolHoldSummary> findCallVolHoldSummaryByCallVolId(int callVolId) {
 		String idString = String.format(CVHS_CALLVOLID, callVolId);
@@ -56,8 +66,13 @@ public class VCallVolHoldSummaryService {
 	}
 
 	private Mono<CallVolHoldSummary> refreshCallVolHoldSummary(int callVolId, @NonNull List<VHoldItem> vhis) {
-		if (callVolId == 0 || vhis.isEmpty())
+		if (callVolId == 0)
 			return Mono.empty();
+		Flux.fromIterable(vhis).filter(VHoldItem::allowBooking).take(3).map(VHoldItem::getHoldId).map(String::valueOf)
+				.reduce((hId1, hId2) -> hId1 + "," + hId2).defaultIfEmpty(",")
+				.map(s -> new CalvolAllowBookingLog(callVolId, s))
+				.doOnNext(obj -> log.info("refreshCallVolHoldSummary: {}-{}", callVolId, obj))
+				.subscribe(obj -> this.calVolTemplate.insert(obj).subscribe());
 		return this.findChargedHoldsDueDate(vhis)
 				.zipWith(this.vMarcCallVolumeService.getMarcCallVolumeByCallVolId(callVolId),
 						(lendLi, mcv) -> new CallVolHoldSummary(callVolId, vhis, mcv, lendLi))
@@ -66,7 +81,8 @@ public class VCallVolHoldSummaryService {
 
 	private Mono<List<SqlserverCharged>> findChargedHoldsDueDate(List<VHoldItem> vhis) {
 		return Flux.fromIterable(vhis).filter(VHoldItem::onCheckout).map(VHoldItem::getHoldId).collectList()
-				.map(hIds -> this.sqlserverChargedRepository.findByHoldIdIn(hIds, Sort.by("returnDate")));
+				.map(hIds -> this.sqlserverChargedRepository.findByHoldIdIn(hIds, Sort.by("returnDate")))
+				.timeout(Duration.ofSeconds(6)).defaultIfEmpty(new ArrayList<>());
 	}
 
 	private Mono<CallVolHoldSummary> chkHotStatusDate(CallVolHoldSummary cvhs) {
@@ -101,10 +117,10 @@ public class VCallVolHoldSummaryService {
 	public Mono<Boolean> checkRenewableLend(int holdId) {
 		return this.vHoldItemService.getVHoldItemById(holdId).map(VHoldItem::getCallVolId)
 				.flatMap(cvId -> Mono.justOrEmpty(this.sqlserverChargedRepository.findByHoldId(holdId))
-						.map(SqlserverCharged::getReaderId)
+						.timeout(Duration.ofSeconds(6)).map(SqlserverCharged::getReaderId)
 						.flatMap(rId -> this.findCallVolHoldSummaryByCallVolId(cvId, rId)))
 				.flatMap(cvhs -> this.vBookingService.findBookingIdsByItemId(cvhs.getId())
-						.map(li -> cvhs.isRenewableLend(1, li.size())))
+						.map(li -> cvhs.isRenewableLend(RENEWLEND_OVERWAITING, li.size())))
 				.defaultIfEmpty(false);
 	}
 

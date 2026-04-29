@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
+import tw.com.hyweb.cathold.backend.redis.service.VBookingService;
 import tw.com.hyweb.cathold.backend.redis.service.VCallVolHoldSummaryService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldClientService;
 import tw.com.hyweb.cathold.backend.redis.service.VHoldItemService;
@@ -70,10 +71,12 @@ import tw.com.hyweb.cathold.model.view.BookingHistoryView;
 import tw.com.hyweb.cathold.model.view.BookingResultView;
 import tw.com.hyweb.cathold.model.view.BookingStatusView;
 import tw.com.hyweb.cathold.model.view.BookingView;
+import tw.com.hyweb.cathold.model.view.CabinetSuggestHoldView;
 import tw.com.hyweb.cathold.model.view.CallVolHoldSummary;
 import tw.com.hyweb.cathold.model.view.ExpandDuedateView;
 import tw.com.hyweb.cathold.model.view.ReaderBookingSummary;
 import tw.com.hyweb.cathold.model.view.ReaderStopBookingInfo;
+import tw.com.hyweb.cathold.model.view.TodayBookingInfo;
 import tw.com.hyweb.cathold.model.view.TradeoffStopBookingResultView;
 import tw.com.hyweb.cathold.model.view.TransitOverdaysStaticView;
 import tw.com.hyweb.cathold.model.view.TransitOverdaysView;
@@ -98,6 +101,8 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	private static final String USER_ID = "userId";
 
 	private static final String MUSER_ID = "muserId";
+
+	private static final String BOOKING_ID = "bookingId";
 
 	private static final String BOOKING_IDS = "bookingIds";
 
@@ -143,6 +148,8 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	private final LendCheckService lendCheckService;
 
+	private final VBookingService vBookingService;
+
 	private final VMarcHoldSummaryService vMarcHoldSummaryService;
 
 	private final VCallVolHoldSummaryService vCallVolHoldSummaryService;
@@ -170,8 +177,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	@Override
 	public Mono<ServerResponse> getReadersBookingViews(ServerRequest request) {
-		Flux<Integer> readerFlux = Mono.justOrEmpty(request.queryParams().get("readerIds"))
-				.flatMapMany(Flux::fromIterable).map(Integer::parseInt);
+		Flux<Integer> readerFlux = Flux.fromIterable(request.queryParams().get("readerIds")).map(Integer::parseInt);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
 				.body(readerFlux.flatMap(this.bookingViewService::getAllBookingViewsByReaderId), BookingView.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
@@ -216,6 +222,13 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<Integer> param0 = Mono.justOrEmpty(request.queryParam(READER_ID)).map(Integer::parseInt);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
 				.body(param0.flatMap(this.userSuspendBookingService::getReaderSuspendBooking), UserSuspendBooking.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
+	}
+
+	@Override
+	public Mono<ServerResponse> getTodayBookingInfo(ServerRequest request) {
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
+				.body(this.bookingStatusViewService.getTodayBookingInfo(), TodayBookingInfo.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -265,8 +278,8 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.filter(type -> type == 'T' || type == 'C');
 		Mono<Integer> pickMono = formMap.map(m -> m.getFirst("pickSiteId")).map(Integer::parseInt)
 				.filter(pickId -> pickId > 0);
-		Mono<String> commentMono = formMap.map(m -> m.getFirst(COMMENT)).defaultIfEmpty("");
-		Mono<Integer> muserMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500)
+		Mono<String> commentMono = this.noRequiredParameter(formMap, COMMENT).defaultIfEmpty("");
+		Mono<Integer> muserMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500)
 				.filter(mId -> mId > 0);
 		Flux<BookingResultView> flux = ridMono.flatMapMany(rId -> typeMono.flatMapMany(
 				type -> pickMono.flatMapMany(pick -> commentMono.flatMapMany(comment -> muserMono.flatMapMany(
@@ -296,7 +309,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
 		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<Integer> muserMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500)
+		Mono<Integer> muserMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500)
 				.filter(mId -> mId > 0);
 		Mono<UserBookingResultView> mono = ridMono.flatMap(rId -> bdMono.flatMap(begDate -> edMono.flatMap(
 				endDate -> muserMono.flatMap(mId -> this.amqpBackendClient.suspendBooking(rId, begDate, endDate, mId)
@@ -312,10 +325,10 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<Integer> ridMono = formMap.map(m -> m.getFirst(READER_ID)).map(Integer::parseInt).filter(rId -> rId > 0);
 		Flux<Long> bidFlux = formMap.map(m -> m.get(BOOKING_IDS)).flatMapMany(Flux::fromIterable).map(Long::parseLong)
 				.filter(bId -> bId > 0);
-		Mono<String> commentMono = formMap.map(m -> m.getFirst(COMMENT)).defaultIfEmpty("");
-		Mono<Boolean> ovMono = formMap.map(m -> m.getFirst("override")).map(Boolean::parseBoolean)
+		Mono<String> commentMono = this.noRequiredParameter(formMap, COMMENT).defaultIfEmpty("");
+		Mono<Boolean> ovMono = this.noRequiredParameter(formMap, "override").map(Boolean::parseBoolean)
 				.defaultIfEmpty(false);
-		Mono<Integer> muserMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500)
+		Mono<Integer> muserMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500)
 				.filter(mId -> mId > 0);
 		Flux<BookingResultView> flux = ridMono.flatMapMany(rId -> commentMono
 				.flatMapMany(comment -> ovMono.flatMapMany(override -> muserMono.flatMapMany(mId -> bidFlux
@@ -332,12 +345,12 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Flux<Long> bidFlux = formMap.map(m -> m.get(BOOKING_IDS)).flatMapMany(Flux::fromIterable).map(Long::parseLong)
 				.filter(bId -> bId > 0);
 		Mono<Integer> ridMono = formMap.map(m -> m.getFirst(READER_ID)).map(Integer::parseInt).filter(rId -> rId > 0);
-		Mono<Integer> sidMono = formMap.map(m -> m.getFirst(SITE_ID)).map(Integer::parseInt).defaultIfEmpty(0);
-		Mono<LocalDate> ddMono = formMap.map(m -> m.getFirst(DUE_DATE))
+		Mono<Integer> sidMono = this.noRequiredParameter(formMap, SITE_ID).map(Integer::parseInt).defaultIfEmpty(0);
+		Mono<LocalDate> ddMono = this.noRequiredParameter(formMap, DUE_DATE)
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)))
 				.defaultIfEmpty(LocalDate.now().minusDays(1));
-		Mono<String> commentMono = formMap.map(m -> m.getFirst(COMMENT)).defaultIfEmpty("");
-		Mono<Integer> muserMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500)
+		Mono<String> commentMono = this.noRequiredParameter(formMap, COMMENT).defaultIfEmpty("");
+		Mono<Integer> muserMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500)
 				.filter(mId -> mId > 0);
 		Flux<BookingResultView> flux = ridMono.flatMapMany(rId -> sidMono.flatMapMany(siteId -> ddMono
 				.flatMapMany(dueDate -> commentMono.flatMapMany(comment -> muserMono.flatMapMany(mId -> bidFlux
@@ -352,7 +365,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	public Mono<ServerResponse> cancelSuspendBooking(ServerRequest request) {
 		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey(READER_ID));
 		Mono<Integer> ridMono = formMap.map(m -> m.getFirst(READER_ID)).map(Integer::parseInt).filter(rId -> rId > 0);
-		Mono<Integer> muserMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500)
+		Mono<Integer> muserMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500)
 				.filter(mId -> mId > 0);
 		Mono<UserBookingResultView> mono = ridMono
 				.flatMap(rId -> muserMono.flatMap(mId -> this.amqpBackendClient.cancelSuspendBooking(rId, mId)))
@@ -452,9 +465,11 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<Integer> skipMono = Mono.justOrEmpty(request.queryParam(SKIP)).map(Integer::parseInt).defaultIfEmpty(0);
 		Mono<Integer> takeMono = Mono.justOrEmpty(request.queryParam(TAKE)).map(Integer::parseInt).defaultIfEmpty(999);
 		Mono<BookingAvailWaitings> mono = sidMono
-				.flatMap(siteId -> this.calVolTemplate
-						.select(query(where(SITE_ID).is(siteId)).sort(Sort.by(SEQNUM)), VBookingAvailRemove.class)
-						.map(BookingAvailationView::new).collectList())
+				.flatMap(
+						siteId -> this.calVolTemplate
+								.select(query(where(SITE_ID).is(siteId).and("removeDate").isNull())
+										.sort(Sort.by(SEQNUM)), VBookingAvailRemove.class)
+								.map(BookingAvailationView::new).collectList())
 				.filter(li -> !li.isEmpty()).flatMap(li -> skipMono.flatMap(skip -> takeMono.map(take -> {
 					int len = li.size();
 					int fSkip = skip >= len ? len - 1 : skip;
@@ -492,15 +507,11 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 						siteId -> this.calVolTemplate
 								.select(query(where("dueSite").is(siteId)),
 										BookingDistribution.class)
-								.filterWhen(
-										bd -> typesMono
-												.flatMap(types -> containsMono
-														.flatMap(contains -> this.vHoldItemService
-																.getVHoldItemById(bd.getHoldId())
-																.map(vh -> !(types.contains(vh.getTypeCode())
-																		^ contains))
-																.defaultIfEmpty(false))
-														.defaultIfEmpty(true))));
+								.filterWhen(bd -> typesMono.flatMap(types -> containsMono
+										.flatMap(contains -> this.vHoldItemService.getVHoldItemById(bd.getHoldId())
+												.map(vh -> !(types.contains(vh.getTypeCode()) ^ contains))
+												.defaultIfEmpty(false)))
+										.defaultIfEmpty(true)));
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingDistribution.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
@@ -527,7 +538,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<Integer> ridMono = formMap.map(m -> m.getFirst(READER_ID)).map(Integer::parseInt).filter(rId -> rId > 0);
 		Flux<Long> bidFlux = formMap.map(m -> m.get(BOOKING_IDS)).flatMapMany(Flux::fromIterable).map(Long::parseLong)
 				.filter(bId -> bId > 0);
-		Mono<Integer> midMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500);
+		Mono<Integer> midMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500);
 		Flux<BookingResultView> flux = ridMono.flatMapMany(rId -> midMono
 				.flatMapMany(mId -> bidFlux.flatMap(bId -> this.amqpBackendClient.expandAvailDueDate(rId, bId, mId))
 						.flatMap(this.bookingResultViewService::convert2BookingResultView)));
@@ -536,17 +547,17 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	}
 
 	@Override
-	public Mono<ServerResponse> addDueDateRule(ServerRequest request) {
+	public Mono<ServerResponse> addBookingDueDateRule(ServerRequest request) {
 		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey(BEG_DATE));
 		Mono<LocalDate> bdMono = formMap.map(m -> m.getFirst(BEG_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
+		Mono<LocalDate> edMono = this.noRequiredParameter(formMap, END_DATE)
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<LocalDate> duMono = formMap.map(m -> m.getFirst(DUE_DATE))
+		Mono<LocalDate> duMono = this.noRequiredParameter(formMap, DUE_DATE)
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<String> siteMono = formMap.map(m -> m.getFirst(SITE_CODE)).defaultIfEmpty("ALL");
-		Mono<Boolean> epMono = formMap.map(m -> m.getFirst("expand")).map(Boolean::parseBoolean);
-		Mono<Boolean> ovjMono = formMap.map(m -> m.getFirst("overJustify")).map(Boolean::parseBoolean)
+		Mono<String> siteMono = this.noRequiredParameter(formMap, SITE_CODE).defaultIfEmpty("ALL");
+		Mono<Boolean> epMono = this.noRequiredParameter(formMap, "expand").map(Boolean::parseBoolean);
+		Mono<Boolean> ovjMono = this.noRequiredParameter(formMap, "overJustify").map(Boolean::parseBoolean)
 				.defaultIfEmpty(false);
 		Mono<List<BookingDueDate>> mono = bdMono.flatMap(begDate -> edMono.defaultIfEmpty(begDate)
 				.flatMap(endDate -> epMono.map(expand -> Boolean.TRUE.equals(expand) ? 1 : 0).defaultIfEmpty(2)
@@ -563,9 +574,9 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey(BEG_DATE));
 		Mono<LocalDate> bdMono = formMap.map(m -> m.getFirst(BEG_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
+		Mono<LocalDate> edMono = this.noRequiredParameter(formMap, END_DATE)
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<String> siteMono = formMap.map(m -> m.getFirst(SITE_CODE)).defaultIfEmpty("ALL");
+		Mono<String> siteMono = this.noRequiredParameter(formMap, SITE_CODE).defaultIfEmpty("ALL");
 		Mono<BookingCloseDate> mono = bdMono
 				.flatMap(begDate -> edMono.defaultIfEmpty(begDate).flatMap(endDate -> siteMono
 						.flatMap(site -> this.calVolTemplate.insert(new BookingCloseDate(begDate, endDate, site)))));
@@ -582,9 +593,9 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
 		Mono<String> fsiteMono = formMap.map(m -> m.getFirst(FROM_PSITECODE));
-		Mono<String> dsiteMono = formMap.map(m -> m.getFirst("descPSite")).defaultIfEmpty("");
+		Mono<String> dsiteMono = this.noRequiredParameter(formMap, "descPSite").defaultIfEmpty("");
 		Mono<String> tmMono = formMap.map(m -> m.getFirst(TOMOBILE_MSG));
-		Mono<String> tsiteMono = formMap.map(m -> m.getFirst("toPSiteCode")).defaultIfEmpty("");
+		Mono<String> tsiteMono = this.noRequiredParameter(formMap, "toPSiteCode").defaultIfEmpty("");
 		Flux<NoticeSmsRule> flux = bdMono
 				.flatMap(begDate -> edMono.flatMap(endDate -> fsiteMono.flatMap(
 						fromPSiteCode -> tmMono.flatMap(toMobileMsg -> dsiteMono.flatMap(descPSite -> tsiteMono.flatMap(
@@ -601,7 +612,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)))
 				.defaultIfEmpty(LocalDate.now());
 		Flux<BookingDueDate> flux = bdMono.flatMapMany(begDate -> this.calVolTemplate
-				.select(query(where(BEG_DATE).greaterThanOrEquals(begDate)), BookingDueDate.class));
+				.select(query(where("endDuedate").greaterThanOrEquals(begDate)), BookingDueDate.class));
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingDueDate.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
@@ -641,8 +652,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	@Override
 	public Mono<ServerResponse> delBookingCloseDate(ServerRequest request) {
-		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey("id"));
-		Mono<String> mono = formMap.map(m -> m.getFirst("id")).map(Integer::parseInt).filter(id -> id > 0)
+		Mono<String> mono = Mono.justOrEmpty(request.queryParam("id")).map(Integer::parseInt).filter(id -> id > 0)
 				.flatMap(id -> this.calVolTemplate.selectOne(query(where("id").is(id)), BookingCloseDate.class))
 				.flatMap(this.calVolTemplate::delete).map(bcd -> "bookingCloseDate deleted: " + bcd.getId());
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(mono, String.class)
@@ -651,8 +661,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	@Override
 	public Mono<ServerResponse> delNoticeSmsRule(ServerRequest request) {
-		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey(RULE_ID));
-		Flux<NoticeSmsRule> flux = formMap.map(m -> m.getFirst(RULE_ID)).map(Integer::parseInt)
+		Flux<NoticeSmsRule> flux = Mono.justOrEmpty(request.queryParam(RULE_ID)).map(Integer::parseInt)
 				.flatMap(this.amqpBackendClient::delNoticeSmsRule).flatMapMany(Flux::fromIterable);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, NoticeSmsRule.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
@@ -660,13 +669,13 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	@Override
 	public Mono<ServerResponse> updBookingCloseDate(ServerRequest request) {
-		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey("id"));
-		Mono<LocalDate> bdMono = formMap.map(m -> m.getFirst(BEG_DATE))
+		Mono<LocalDate> bdMono = Mono.justOrEmpty(request.queryParam(BEG_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
+		Mono<LocalDate> edMono = Mono.justOrEmpty(request.queryParam(END_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<String> sdMono = formMap.map(m -> m.getFirst(SITE_CODE));
-		Mono<BookingCloseDate> mono = formMap.map(m -> m.getFirst("id")).map(Integer::parseInt).filter(id -> id > 0)
+		Mono<String> sdMono = Mono.justOrEmpty(request.queryParam(SITE_CODE));
+		Mono<BookingCloseDate> mono = Mono.justOrEmpty(request.queryParam("id")).map(Integer::parseInt)
+				.filter(id -> id > 0)
 				.flatMap(id -> this.calVolTemplate.selectOne(query(where("id").is(id)), BookingCloseDate.class))
 				.flatMap(bcd -> bdMono.map(begDate -> {
 					bcd.setBegDate(begDate);
@@ -684,15 +693,14 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 
 	@Override
 	public Mono<ServerResponse> updateNoticeSmsRule(ServerRequest request) {
-		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey(RULE_ID));
-		Mono<LocalDate> bdMono = formMap.map(m -> m.getFirst(BEG_DATE))
+		Mono<LocalDate> bdMono = Mono.justOrEmpty(request.queryParam(BEG_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<LocalDate> edMono = formMap.map(m -> m.getFirst(END_DATE))
+		Mono<LocalDate> edMono = Mono.justOrEmpty(request.queryParam(END_DATE))
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
-		Mono<String> fsiteMono = formMap.map(m -> m.getFirst(FROM_PSITECODE));
-		Mono<String> dsiteMono = formMap.map(m -> m.getFirst("descPSite"));
-		Mono<String> tmMono = formMap.map(m -> m.getFirst(TOMOBILE_MSG));
-		Mono<String> tsiteMono = formMap.map(m -> m.getFirst("toPSiteCode"));
+		Mono<String> fsiteMono = Mono.justOrEmpty(request.queryParam(FROM_PSITECODE));
+		Mono<String> dsiteMono = Mono.justOrEmpty(request.queryParam("descPSite"));
+		Mono<String> tmMono = Mono.justOrEmpty(request.queryParam(TOMOBILE_MSG));
+		Mono<String> tsiteMono = Mono.justOrEmpty(request.queryParam("toPSiteCode"));
 		Flux<NoticeSmsRule> flux = Mono.justOrEmpty(request.queryParam(RULE_ID)).map(Integer::parseInt)
 				.map(NoticeSmsRule::new).flatMap(nsr -> bdMono.map(begDate -> {
 					nsr.setBegDate(begDate);
@@ -724,15 +732,15 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.filter(fm -> fm.containsKey(SITE_CODE) && fm.containsKey("name"));
 		Mono<String> scmono = formMap.map(m -> m.getFirst(SITE_CODE)).filter(s -> !s.isEmpty());
 		Mono<String> nameMono = formMap.map(m -> m.getFirst("name")).filter(s -> !s.isEmpty());
-		Mono<String> nrMono = formMap.map(m -> m.getFirst("noIntransitSites")).defaultIfEmpty("");
-		Mono<String> gsMono = formMap.map(m -> m.getFirst("giveSeqProp"));
-		Mono<String> srMono = formMap.map(m -> m.getFirst("seqRange")).defaultIfEmpty("1-600#0");
-		Mono<String> ntMono = formMap.map(m -> m.getFirst("noticeTypes")).defaultIfEmpty("HOT-BOOK#2,HOT-BA#3");
-		Mono<String> nsMono = formMap.map(m -> m.getFirst("noticeSites")).defaultIfEmpty("");
-		Mono<String> nlMono = formMap.map(m -> m.getFirst("noticeLocations")).defaultIfEmpty("18Y#1,BSP#2");
-		Mono<Boolean> tdMono = formMap.map(m -> m.getFirst("transitDouble")).map(Boolean::parseBoolean)
+		Mono<String> nrMono = this.noRequiredParameter(formMap, "noIntransitSites").defaultIfEmpty("");
+		Mono<String> gsMono = this.noRequiredParameter(formMap, "giveSeqProp");
+		Mono<String> srMono = this.noRequiredParameter(formMap, "seqRange").defaultIfEmpty("1-600#0");
+		Mono<String> ntMono = this.noRequiredParameter(formMap, "noticeTypes").defaultIfEmpty("HOT-BOOK#2,HOT-BA#3");
+		Mono<String> nsMono = this.noRequiredParameter(formMap, "noticeSites").defaultIfEmpty("");
+		Mono<String> nlMono = this.noRequiredParameter(formMap, "noticeLocations").defaultIfEmpty("18Y#1,BSP#2");
+		Mono<Boolean> tdMono = this.noRequiredParameter(formMap, "transitDouble").map(Boolean::parseBoolean)
 				.defaultIfEmpty(false);
-		Mono<Boolean> tfMono = formMap.map(m -> m.getFirst("toFloatLoc")).map(Boolean::parseBoolean)
+		Mono<Boolean> tfMono = this.noRequiredParameter(formMap, "toFloatLoc").map(Boolean::parseBoolean)
 				.defaultIfEmpty(true);
 		Mono<HoldClient> mono = scmono
 				.flatMap(code -> nameMono.map(name -> HoldClient.builder().siteCode(code).name(name))
@@ -753,19 +761,17 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	public Mono<ServerResponse> updateHoldClient(ServerRequest request) {
 		Mono<MultiValueMap<String, String>> formMap = request.formData().filter(fm -> fm.containsKey("clientId"));
 		Mono<Integer> cIdmono = formMap.map(m -> m.getFirst("clientId")).map(Integer::parseInt).filter(cId -> cId > 0);
-		Mono<String> nameMono = formMap.map(m -> m.getFirst("name"));
-		Mono<String> nrMono = formMap.map(m -> m.getFirst("noIntransitSites"));
-		Mono<String> gsMono = formMap.map(m -> m.getFirst("giveSeqProp"));
-		Mono<String> srMono = formMap.map(m -> m.getFirst("seqRange"));
-		Mono<String> ntMono = formMap.map(m -> m.getFirst("noticeTypes"));
-		Mono<String> nsMono = formMap.map(m -> m.getFirst("noticeSites"));
-		Mono<String> nlMono = formMap.map(m -> m.getFirst("noticeLocations"));
-		Mono<Integer> seqMono = formMap.map(m -> m.getFirst(SEQNUM)).map(Integer::parseInt).filter(seq -> seq > 0)
+		Mono<String> nameMono = this.noRequiredParameter(formMap, "name");
+		Mono<String> nrMono = this.noRequiredParameter(formMap, "noIntransitSites");
+		Mono<String> gsMono = this.noRequiredParameter(formMap, "giveSeqProp");
+		Mono<String> srMono = this.noRequiredParameter(formMap, "seqRange");
+		Mono<String> ntMono = this.noRequiredParameter(formMap, "noticeTypes");
+		Mono<String> nsMono = this.noRequiredParameter(formMap, "noticeSites");
+		Mono<String> nlMono = this.noRequiredParameter(formMap, "noticeLocations");
+		Mono<Integer> seqMono = this.noRequiredParameter(formMap, SEQNUM).map(Integer::parseInt).filter(seq -> seq > 0)
 				.defaultIfEmpty(-1);
-		Mono<Boolean> tdMono = formMap.map(m -> m.getFirst("transitDouble")).map(Boolean::parseBoolean)
-				.defaultIfEmpty(false);
-		Mono<Boolean> tfMono = formMap.map(m -> m.getFirst("toFloatLoc")).map(Boolean::parseBoolean)
-				.defaultIfEmpty(true);
+		Mono<Boolean> tdMono = this.noRequiredParameter(formMap, "transitDouble").map(Boolean::parseBoolean);
+		Mono<Boolean> tfMono = this.noRequiredParameter(formMap, "toFloatLoc").map(Boolean::parseBoolean);
 		Mono<HoldClient> mono = cIdmono.map(cId -> HoldClient.builder().id(cId))
 				.flatMap(hcb -> nameMono.map(hcb::name).defaultIfEmpty(hcb))
 				.flatMap(hcb -> nrMono.map(hcb::noIntransitSites).defaultIfEmpty(hcb))
@@ -803,8 +809,8 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 		Flux<Long> bidFlux = formMap.map(m -> m.get(BOOKING_IDS)).flatMapMany(Flux::fromIterable).map(Long::parseLong)
 				.filter(bId -> bId > 0);
 		Mono<Integer> ridMono = formMap.map(m -> m.getFirst(READER_ID)).map(Integer::parseInt).filter(rId -> rId > 0);
-		Mono<String> commentMono = formMap.map(m -> m.getFirst(COMMENT)).defaultIfEmpty("");
-		Mono<Integer> midMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500);
+		Mono<String> commentMono = this.noRequiredParameter(formMap, COMMENT).defaultIfEmpty("");
+		Mono<Integer> midMono = this.noRequiredParameter(formMap, MUSER_ID).map(Integer::parseInt).defaultIfEmpty(500);
 		Flux<BookingHistory> flux = ridMono.flatMapMany(
 				readerId -> commentMono.flatMapMany(comment -> midMono.flatMapMany(muserId -> bidFlux.flatMap(
 						bookingId -> this.amqpBackendClient.cancelOverdueBooking(bookingId, readerId, comment, muserId),
@@ -877,26 +883,22 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	public Mono<ServerResponse> getOverdaysTransitesBySiteId(ServerRequest request) {
 		Mono<Integer> sidMono = Mono.justOrEmpty(request.queryParam(SITE_ID)).map(Integer::parseInt)
 				.filter(siteId -> siteId > 0);
-		Mono<Integer> weeksMono = Mono.justOrEmpty(request.queryParam("weeks")).map(Integer::parseInt)
-				.defaultIfEmpty(0);
+		Mono<Integer> weeksMono = Mono.justOrEmpty(request.queryParam("weeks")).map(Integer::parseInt);
 		Mono<List<String>> typecodesMono = Mono.justOrEmpty(request.queryParams().get("typeCodes"));
 		Mono<Boolean> containsMono = Mono.justOrEmpty(request.queryParam("contains")).map(Boolean::parseBoolean);
 		Flux<TransitOverdaysView> flux = sidMono
 				.flatMapMany(
 						siteId -> this.calVolTemplate
-								.select(query(where("dueSiteId").is(siteId).and("touchTime").isNull())
-										.sort(Sort.by("weeks", TRANSIT_DATE)), TransitOverdays.class))
-				.filterWhen(
-						tod -> weeksMono.map(weeks -> tod.getWeeks() == weeks)
-								.switchIfEmpty(
-										typecodesMono
-												.flatMap(typeCodes -> containsMono
-														.flatMap(contains -> this.vHoldItemService
-																.getVHoldItemById(tod.getHoldId())
-																.map(vh -> !(typeCodes.contains(vh.getTypeCode())
-																		^ contains))
-																.defaultIfEmpty(false)))
-												.defaultIfEmpty(true)))
+								.select(query(where("dueSiteId").is(siteId).and("touchTime").isNull()).sort(Sort
+										.by("weeks", TRANSIT_DATE)), TransitOverdays.class))
+				.filterWhen(tod -> weeksMono.map(
+						weeks -> tod.getWeeks() == weeks).defaultIfEmpty(
+								true))
+				.filterWhen(tod -> typecodesMono
+						.flatMap(typeCodes -> containsMono.flatMap(contains -> this.vHoldItemService
+								.getVHoldItemById(tod.getHoldId())
+								.map(vh -> !(typeCodes.contains(vh.getTypeCode()) ^ contains)).defaultIfEmpty(false)))
+						.defaultIfEmpty(true))
 				.flatMap(tod -> this.itemSiteDefService.getCodeById(tod.getFromSiteId())
 						.flatMap(fsCode -> this.itemSiteDefService.getCodeById(tod.getToSiteId())
 								.flatMap(tsCode -> this.itemSiteDefService.getCodeById(tod.getSiteId())
@@ -918,10 +920,13 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	public Mono<ServerResponse> getBookingsDueDateAfter(ServerRequest request) {
 		Mono<Integer> daysMono = Mono.justOrEmpty(request.queryParam("days")).map(Integer::parseInt)
 				.filter(days -> days >= 0);
-		Flux<BookingView> flux = daysMono
-				.flatMapMany(days -> this.calVolTemplate
-						.select(query(where(DUE_DATE).is(LocalDate.now().plusDays(days)).and(PHASE).is(Phase.AVAILABLE))
-								.sort(Sort.by(USER_ID)), Booking.class))
+		Mono<Integer> skipMono = Mono.justOrEmpty(request.queryParam(SKIP)).map(Integer::parseInt).defaultIfEmpty(0);
+		Mono<Integer> takeMono = Mono.justOrEmpty(request.queryParam(TAKE)).map(Integer::parseInt)
+				.defaultIfEmpty(Integer.MAX_VALUE);
+		Flux<BookingView> flux = skipMono
+				.flatMapMany(skip -> takeMono.flatMapMany(take -> daysMono.flatMapMany(days -> this.vBookingService
+						.getBookingUserIdsByDueDateAfter(days).skip(skip).take(take).flatMapSequential(
+								userId -> this.vBookingService.getBookingsByUserIdDuedateAfter(userId, days)))))
 				.flatMap(this.bookingViewService::convert2BookingView);
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, BookingView.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
@@ -945,7 +950,7 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 														.and(PHASE).is(Phase.AVAILABLE)).sort(Sort.by(USER_ID)),
 												Booking.class)))
 				.filterWhen(bi -> typeMono.flatMap(type -> this.calVolTemplate
-						.selectOne(query(where("id").is(bi.getId())), VBookingAvailation.class).map(vba -> {
+						.selectOne(query(where(BOOKING_ID).is(bi.getId())), VBookingAvailation.class).map(vba -> {
 							if ("l".equals(type))
 								return vba.getLinepush();
 							return Objects.equals(vba.getNtype(), type);
@@ -1014,8 +1019,8 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 	@Override
 	public Mono<ServerResponse> rollbackFillBooking(ServerRequest request) {
 		Mono<MultiValueMap<String, String>> formMap = request.formData()
-				.filter(fm -> fm.containsKey(MUSER_ID) && fm.containsKey("bookingId"));
-		Mono<Long> bidMono = formMap.map(m -> m.getFirst("bookingId")).map(Long::parseLong).filter(bid -> bid > 0);
+				.filter(fm -> fm.containsKey(MUSER_ID) && fm.containsKey(BOOKING_ID));
+		Mono<Long> bidMono = formMap.map(m -> m.getFirst(BOOKING_ID)).map(Long::parseLong).filter(bid -> bid > 0);
 		Mono<Integer> midMono = formMap.map(m -> m.getFirst(MUSER_ID)).map(Integer::parseInt).defaultIfEmpty(500);
 		Mono<BookingResultView> mono = bidMono
 				.flatMap(bId -> midMono.flatMap(mId -> this.amqpBackendClient.rollbackFillBooking(bId, mId)))
@@ -1067,9 +1072,9 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.map(s -> LocalDate.parse(s, DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
 		Flux<TransitOverdaysStaticView> flux = bdMono
 				.flatMapMany(begDate -> edMono.flatMapMany(endDate -> this.calVolTemplate
-						.select(query(where("createDate").between(bdMono, edMono)), TransitOverdaysStatic.class)))
+						.select(query(where("createDate").between(begDate, endDate)), TransitOverdaysStatic.class)))
 				.map(TransitOverdaysStaticView::new);
-		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, TransitOverdaysStatic.class)
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, TransitOverdaysStaticView.class)
 				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
@@ -1149,6 +1154,20 @@ public class CatvolBookingServiceImpl implements CatvolBookingService {
 				.doOnNext(tsbrv -> log.info("{}", tsbrv))));
 		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
 				.body(mono, TradeoffStopBookingResultView.class).switchIfEmpty(ServerResponse.notFound().build());
+	}
+
+	private Mono<String> noRequiredParameter(Mono<MultiValueMap<String, String>> mmap, String key) {
+		return mmap.filter(mm -> mm.containsKey(key)).map(mm -> mm.getFirst(key));
+	}
+
+	@Override
+	public Mono<ServerResponse> getCabinetSuggestList(ServerRequest request) {
+		Mono<Integer> sidMono = Mono.justOrEmpty(request.queryParam(SITE_ID)).map(Integer::parseInt)
+				.filter(siteId -> siteId > 0);
+		Flux<CabinetSuggestHoldView> flux = sidMono.flatMap(this.amqpBackendClient::getCabinetSuggestList)
+				.flatMapMany(Flux::fromIterable).map(CabinetSuggestHoldView::new);
+		return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(flux, CabinetSuggestHoldView.class)
+				.switchIfEmpty(ServerResponse.notFound().build());
 	}
 
 }

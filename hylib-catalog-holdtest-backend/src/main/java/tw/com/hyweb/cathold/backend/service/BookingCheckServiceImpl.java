@@ -26,7 +26,7 @@ public class BookingCheckServiceImpl implements BookingCheckService {
 
 	@Override
 	public Mono<Integer> onAvailBooking(int holdId) {
-		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE, Phase.WAIT_ANNEX);
+		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE, Phase.WAIT_ANNEX, Phase.CAB_WAIT);
 		return this.calVolTemplate
 				.selectOne(query(where("associateId").is(holdId).and("phase").in(availPhases)), Booking.class)
 				.map(Booking::getUserId);

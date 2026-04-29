@@ -4,11 +4,6 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import org.springframework.beans.BeanUtils;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import tw.com.hyweb.cathold.model.AppendixStatus;
@@ -39,8 +34,6 @@ public class BookingStatusView implements Serializable {
 
 	private int waitDays;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate updateDate;
 
 	public BookingStatusView(McvBookingStatus mcvBookingStatus) {

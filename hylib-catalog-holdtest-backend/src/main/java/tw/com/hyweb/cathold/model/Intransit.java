@@ -39,26 +39,13 @@ public class Intransit implements Serializable {
 
 	private String barcode;
 
-	public Intransit(int holdId, int fromSiteId, int toSiteId, Phase phase) {
-		this.holdId = holdId;
-		this.fromSiteId = fromSiteId;
-		this.toSiteId = toSiteId;
-		this.phase = phase;
-	}
-
-	public Intransit(int holdId, int fromSiteId, int toSiteId, Phase phase, LocalDateTime transitDate,
-			String barcode) {
-		this.holdId = holdId;
-		this.fromSiteId = fromSiteId;
-		this.toSiteId = toSiteId;
-		this.phase = phase;
-		if (transitDate != null)
-			this.transitDate = transitDate;
-		this.barcode = barcode;
-	}
-
 	public Intransit(VIntransitBooking vIntransitBooking) {
 		BeanUtils.copyProperties(vIntransitBooking, this);
+	}
+
+	public Intransit(LocalDateTime transitDate) {
+		if (transitDate != null)
+			this.transitDate = transitDate;
 	}
 
 }

@@ -6,10 +6,12 @@ import tw.com.hyweb.cathold.model.Booking;
 import tw.com.hyweb.cathold.model.BookingHistory;
 import tw.com.hyweb.cathold.model.BookingResult;
 import tw.com.hyweb.cathold.model.TradeoffStopBookingResult;
+import tw.com.hyweb.cathold.model.UserSuspendBooking;
 import tw.com.hyweb.cathold.model.view.BookingResultView;
 import tw.com.hyweb.cathold.model.view.ReaderStopBookingInfo;
 import tw.com.hyweb.cathold.model.view.TradeoffStopBookingResultView;
 import tw.com.hyweb.cathold.model.view.UserBookingResultView;
+import tw.com.hyweb.cathold.model.view.UserSuspendBookingView;
 
 @RequiredArgsConstructor
 public class BookingResultViewServiceImpl implements BookingResultViewService {
@@ -45,8 +47,14 @@ public class BookingResultViewServiceImpl implements BookingResultViewService {
 
 	@Override
 	public Mono<UserBookingResultView> convert2UserBookingResultView(BookingResult bookingResult) {
-		// TODO Auto-generated method stub
-		return null;
+		return this.messageMapService.resultPhaseConvert("BookingResult", bookingResult.getResultPhase()).map(s -> {
+			UserBookingResultView ubrv = new UserBookingResultView(s);
+			Class<?> clazz = bookingResult.getResultClass();
+			Object result = bookingResult.getResult();
+			if (clazz != null && clazz.isInstance(result))
+				ubrv.setReaderSuspendBooking(new UserSuspendBookingView((UserSuspendBooking) result));
+			return ubrv;
+		});
 	}
 
 	@Override

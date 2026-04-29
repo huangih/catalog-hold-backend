@@ -37,6 +37,8 @@ public class VBookingAvailRemove implements Serializable {
 
 	private String mark;
 
+	private String cabCode;
+
 	private LocalDateTime availableDate;
 
 	private LocalDate duePickupDate;

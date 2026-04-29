@@ -35,7 +35,7 @@ public class HylibCatalogHoldtestBackendApplication {
 		SpringApplication.run(HylibCatalogHoldtestBackendApplication.class, args);
 	}
 
-//	@Bean
+	@Bean
 	CommandLineRunner test(R2dbcEntityOperations calVolTemplate, MessageConverter messageConverter,
 			BookingViewService bookingViewService, UserCheckService userCheckService,
 			VParameterService vParameterService, CatHoldManagerService catHoldManagerService,
@@ -72,6 +72,8 @@ public class HylibCatalogHoldtestBackendApplication {
 			vCallVolHoldSummaryService.findCallVolHoldSummaryByCallVolId(1228211, 47599)
 					.subscribe(cvhs -> log.info("{}", cvhs));
 			userCheckService.checkReaderType(2444481, "noFloatLend").subscribe(obj -> log.info("{}", obj));
+//			amqpBackendClient.getCabinetSuggestList(136).flatMapMany(Flux::fromIterable)
+//					.subscribe(obj -> log.info("{}", obj));
 		};
 	}
 }

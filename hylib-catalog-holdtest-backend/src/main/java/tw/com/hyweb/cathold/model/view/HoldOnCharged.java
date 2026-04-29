@@ -3,11 +3,6 @@ package tw.com.hyweb.cathold.model.view;
 import java.io.Serializable;
 import java.time.LocalDate;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import tw.com.hyweb.cathold.model.VHoldItem;
@@ -22,8 +17,6 @@ public class HoldOnCharged implements Serializable {
 
 	private VHoldItem vHoldItem;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate dueDate;
 
 	public HoldOnCharged(VHoldItem vHoldItem) {

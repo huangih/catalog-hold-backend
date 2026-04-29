@@ -6,11 +6,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.springframework.beans.BeanUtils;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import tw.com.hyweb.cathold.model.SuspendPhase;
@@ -29,12 +24,8 @@ public class UserSuspendBookingView implements Serializable {
 
 	private int userId;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate begDate;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate endDate;
 
 	private SuspendPhase phase = SuspendPhase.SUSPEND_PLACE;

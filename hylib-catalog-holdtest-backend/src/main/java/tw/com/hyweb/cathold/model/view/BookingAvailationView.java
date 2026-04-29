@@ -5,14 +5,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import org.springframework.beans.BeanUtils;
-
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import tw.com.hyweb.cathold.model.Phase;
@@ -40,12 +32,8 @@ public class BookingAvailationView implements Serializable {
 
 	private Phase phase;
 
-	@JsonSerialize(using = LocalDateTimeSerializer.class)
-	@JsonDeserialize(using = LocalDateTimeDeserializer.class)
 	private LocalDateTime availableDate;
 
-	@JsonSerialize(using = LocalDateSerializer.class)
-	@JsonDeserialize(using = LocalDateDeserializer.class)
 	private LocalDate duePickupDate;
 
 	public BookingAvailationView(VBookingAvailation vBookingAvailation) {
@@ -62,12 +50,16 @@ public class BookingAvailationView implements Serializable {
 	public BookingAvailationView(VBookingAvailRemove vBookingAvailRemove) {
 		BeanUtils.copyProperties(vBookingAvailRemove, this);
 		this.pickupSiteId = vBookingAvailRemove.getSiteId();
-		this.availSeqNum = String.format("%03d", vBookingAvailRemove.getSeqNum());
-		String s = vBookingAvailRemove.getMark();
-		if (s != null && !s.isEmpty())
-			this.availSeqNum += "(" + vBookingAvailRemove.getMark() + ")";
-		if (vBookingAvailRemove.getType() > 0)
-			this.availSeqNum += "#" + vBookingAvailRemove.getType();
+		if (vBookingAvailRemove.getCabCode() != null)
+			this.availSeqNum = vBookingAvailRemove.getCabCode();
+		else {
+			this.availSeqNum = String.format("%03d", vBookingAvailRemove.getSeqNum());
+			String s = vBookingAvailRemove.getMark();
+			if (s != null && !s.isEmpty())
+				this.availSeqNum += "(" + vBookingAvailRemove.getMark() + ")";
+			if (vBookingAvailRemove.getType() > 0)
+				this.availSeqNum += "#" + vBookingAvailRemove.getType();
+		}
 	}
 
 	public BookingAvailationView(int holdId) {

@@ -32,6 +32,8 @@ public class LendCheckServiceImpl implements LendCheckService {
 
 	private static final String LENDCALLBACK_NOFLOAT = "noFloatLend";
 
+	private static final List<Phase> AVAIL_PHASES = Arrays.asList(Phase.AVAILABLE, Phase.A01_ORDER, Phase.CAB_WAIT);
+
 	private static final List<String> ANNEX_TYPES = List.of("BA", "AA", "BDA", "HOT-BA");
 
 	private static final List<Character> TYPES = Arrays.asList('F', 'M', 'B', 'T', 'O', 'U', 'D', '7', '9');
@@ -106,10 +108,10 @@ public class LendCheckServiceImpl implements LendCheckService {
 								.filter(chs -> chs.getAllowBookingNum() <= WARN_RESTNUM).filterWhen(chs -> { // 是否為此callVol最後一本預約館藏
 									int holdId = lendCallback.getHoldId();
 									return Mono.just(chs.getWaitBookingNum() > 0).filter(b1 -> b1) // 若此callVol有預約,則true
-											.switchIfEmpty(this.bookingCheckService.onAvailBooking(holdId)
-													.map(bi -> true).filter(b2 -> b2)) // 或 此item為預約待取
-											.switchIfEmpty(this.bookingCheckService.onTransitBooking(holdId)
-													.map(vt -> true).filter(b3 -> b3)) // 或 此item為預約調撥
+											.switchIfEmpty( // 或 此item為預約待取
+													this.bookingCheckService.onAvailBooking(holdId).map(bi -> true))
+											.switchIfEmpty( // 或 此item為預約調撥
+													this.bookingCheckService.onTransitBooking(holdId).map(vt -> true))
 											.defaultIfEmpty(false);
 								}).flatMap(chs -> this.messageMapService
 										.resultPhaseConvert(LENDCHECK, ResultPhase.LASITEM_ALLOWBOOKING).map(s -> {
@@ -184,7 +186,6 @@ public class LendCheckServiceImpl implements LendCheckService {
 	// 借閱者是否已預約此書
 	private Mono<LendCallback> onUserBooking(LendCallback lendCallback) {
 		char type = 'U';
-		List<Phase> availPhases = List.of(Phase.A01_ORDER, Phase.AVAILABLE);
 		int readerId = lendCallback.getReaderId();
 		int hId = lendCallback.getHoldId();
 		if (lendCallback.isTimeout())
@@ -194,7 +195,7 @@ public class LendCheckServiceImpl implements LendCheckService {
 						.filter(vh -> !ANNEX_TYPES.contains(vh.getTypeCode())).map(VHoldItem::getCallVolId)
 						.flatMap(cvId -> this.bookingCheckService.correctUniqueBooking(readerId, cvId, "T")))
 				.map(bi -> {
-					if (!availPhases.contains(bi.getPhase()))
+					if (!AVAIL_PHASES.contains(bi.getPhase()))
 						lendCallback.addCallbackType(type);
 					return lendCallback;
 				}).defaultIfEmpty(lendCallback)
@@ -238,8 +239,9 @@ public class LendCheckServiceImpl implements LendCheckService {
 		// 無須callback
 		char type = '8';
 		return Flux.fromIterable(this.sqlserverChargedRepository.findByReaderId(lendCallback.getReaderId()))
-				.map(SqlserverCharged::getHoldId).flatMap(this.vHoldItemService::getVHoldItemById, 1)
-				.map(VHoldItem::getCallVolId).distinct().collectList()
+				.timeout(Duration.ofSeconds(6)).map(SqlserverCharged::getHoldId)
+				.flatMap(this.vHoldItemService::getVHoldItemById, 1).map(VHoldItem::getCallVolId).distinct()
+				.collectList()
 				.zipWith(this.vHoldItemService.getVHoldItemById(lendCallback.getHoldId()).map(VHoldItem::getCallVolId),
 						Collection::contains)
 				.filter(b -> b).flatMap(b -> this.messageMapService

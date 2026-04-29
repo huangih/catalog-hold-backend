@@ -6,6 +6,7 @@ import static org.springframework.data.relational.core.query.Query.query;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 import org.springframework.stereotype.Component;
 
@@ -36,7 +37,7 @@ public class VMarcCallVolumeService {
 
 	public Flux<MarcCallVolume> getMarcCallVolumesByMarcId(int marcId) {
 		String idString = String.format(CALLVOLIDS_MARCID, marcId);
-		return this.redisUtils.getFluxFromRedis(idString, true).cast(Integer.class)
+		return this.redisUtils.getFluxFromRedis(idString, true, null).cast(Integer.class)
 				.flatMap(this::getMarcCallVolumeByCallVolId, 1).switchIfEmpty(this.refreshMarcCallVolsFromDb(marcId));
 	}
 
@@ -59,7 +60,7 @@ public class VMarcCallVolumeService {
 								.flatMap(mcv -> this.redisUtils.saveForCache(idString, mcv, null))));
 	}
 
-	public Mono<MarcCallVolume> refreshMarcCallVolByCallVolId(int callVolId, Mono<MarcCallVolume> supplier) {
+	public Mono<MarcCallVolume> refreshMarcCallVolByCallVolId(int callVolId, Supplier<Mono<MarcCallVolume>> supplier) {
 		String idString = String.format(MARCALLVOL_CALLVOLID, callVolId);
 		return this.redisUtils.redisMonoCache(idString, supplier, null);
 	}

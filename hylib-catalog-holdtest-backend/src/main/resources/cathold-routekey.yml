@@ -38,6 +38,8 @@ cathold:
     routekey: holdCrud.sqlserverHold
   marccallvol:
     routeKey: holdItem.marcCallVolume
+  rsocketback:
+    routeKey: holdItem.rsocketBack
   synlock:
     routeKey: holdItem.synlock
   typesiteloc:

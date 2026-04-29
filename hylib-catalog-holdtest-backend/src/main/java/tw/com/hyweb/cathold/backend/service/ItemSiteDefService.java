@@ -55,7 +55,11 @@ public class ItemSiteDefService implements HoldClientPropConverter {
 
 	public Mono<Boolean> allowExpandDueDateBySiteIdAndAvailDate(int pickupSiteId, LocalDateTime availableDate) {
 		return this.calVolTemplate.selectOne(query(where("siteId").is(pickupSiteId)), ItemSiteDef.class)
-				.map(siteDef -> siteDef.canExpand(availableDate)).defaultIfEmpty(true);
+				.map(siteDef -> {
+					if (availableDate != null)
+						return siteDef.canExpand(availableDate);
+					return false;
+				}).defaultIfEmpty(true);
 	}
 
 	public Mono<String> getClyStrBySiteId(int siteId) {

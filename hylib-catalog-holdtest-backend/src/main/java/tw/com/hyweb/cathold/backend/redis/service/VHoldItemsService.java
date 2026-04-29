@@ -27,7 +27,7 @@ public class VHoldItemsService {
 
 	public Flux<VHoldItem> findNonShadowHoldItemByMarcId(int marcId) {
 		String idString = String.format(HOLDIDS_MARCID, marcId);
-		return this.redisUtils.getFluxFromRedis(idString, true).cast(Integer.class)
+		return this.redisUtils.getFluxFromRedis(idString, true, null).cast(Integer.class)
 				.flatMap(this.vHoldItemService::getVHoldItemById, 1)
 				.switchIfEmpty(this.refreshNonShadowHoldItemByMarcIdFromDb(marcId));
 	}
@@ -40,7 +40,7 @@ public class VHoldItemsService {
 
 	public Flux<VHoldItem> findNonShadowHoldItemByCallVolId(int callVolId) {
 		String idString = String.format(HOLDIDS_CALLVOLID, callVolId);
-		return this.redisUtils.getFluxFromRedis(idString, true).cast(Integer.class)
+		return this.redisUtils.getFluxFromRedis(idString, true, null).cast(Integer.class)
 				.flatMap(this.vHoldItemService::getVHoldItemById, 1)
 				.switchIfEmpty(this.refreshNonShadowHoldItemByCvIdFromDb(callVolId));
 	}
@@ -56,7 +56,7 @@ public class VHoldItemsService {
 				.collectMultimap(VHoldItem::getCallVolId, VHoldItem::getHoldId)
 				.subscribe(mmap -> Flux.fromIterable(mmap.entrySet()).doOnNext(entry -> {
 					String key = String.format(HOLDIDS_CALLVOLID, entry.getKey());
-					this.redisUtils.redisListCache(key, new ArrayList<Integer>(entry.getValue()), null);
+					this.redisUtils.redisListCache(key, new ArrayList<>(entry.getValue()), null);
 				}).doOnComplete(() -> {
 					if (marcId > 0)
 						Flux.fromIterable(vhis).map(VHoldItem::getHoldId).collectList()

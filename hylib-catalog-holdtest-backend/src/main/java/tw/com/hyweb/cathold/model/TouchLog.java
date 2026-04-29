@@ -23,6 +23,8 @@ public class TouchLog implements Serializable {
 
 	private int clientId;
 
+	private int muserId;
+
 	private String result = "";
 
 	private long preMillions;
@@ -37,9 +39,10 @@ public class TouchLog implements Serializable {
 
 	private LocalDateTime createTime = LocalDateTime.now();
 
-	public TouchLog(String barcode, int clientId) {
+	public TouchLog(String barcode, int clientId, int muserId) {
 		this.barcode = barcode;
 		this.clientId = clientId;
+		this.muserId = muserId;
 	}
 
 }
